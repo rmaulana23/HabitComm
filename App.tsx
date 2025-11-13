@@ -1,7 +1,8 @@
-import React, { useReducer, useState, useEffect } from 'react';
-import { AppState, Habit, User, Post, ReactionType, UserProfile, HabitStreak, StreakLog, Language, Comment, Event, Conversation, PrivateMessage, Notification, NotificationType, BoostRequest } from './types';
-import { getInitialData } from './data';
+import React, { useReducer, useState, useEffect, useCallback } from 'react';
+// FIX: Import `Reaction` type to resolve reference error on line 46.
+import { AppState, Habit, User, Post, Reaction, ReactionType, UserProfile, HabitStreak, StreakLog, Language, Comment, Event, Conversation, PrivateMessage, Notification, NotificationType, BoostRequest } from './types';
 import { translations } from './translations';
+import { supabase } from './supabase';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import HabitView from './components/HuddleView';
@@ -30,15 +31,11 @@ import UserHabitsListView from './components/UserHabitsListView';
 import ManageMembersModal from './components/ManageMembersModal';
 
 
-// --- MOCK DATA ---
-const { habits: initialHabits, users: initialUsers, events: initialEvents, conversations: initialConversations } = getInitialData();
-
-
 // --- REDUCER & STATE ---
 type Action =
+    | { type: 'SET_INITIAL_DATA'; payload: { habits: Habit[], users: UserProfile[], events: Event[], conversations: Conversation[], boostRequests: BoostRequest[] } }
     | { type: 'LOGIN'; payload: UserProfile }
     | { type: 'LOGOUT' }
-    | { type: 'REGISTER'; payload: UserProfile }
     | { type: 'OPEN_AUTH_MODAL'; payload: 'login' | 'register' }
     | { type: 'CLOSE_AUTH_MODAL' }
     | { type: 'SELECT_HABIT'; payload: string }
@@ -46,29 +43,30 @@ type Action =
     | { type: 'VIEW_PROFILE'; payload: string }
     | { type: 'SELECT_CREATE_HABIT' }
     | { type: 'CREATE_HABIT'; payload: Habit }
-    | { type: 'ADD_POST'; payload: { habitId: string; post: Post } }
-    | { type: 'ADD_REACTION'; payload: { habitId: string; postId: string; reactionType: ReactionType } }
+    // FIX: Update ADD_POST payload to include habitId, which is required by the reducer logic on line 219.
+    | { type: 'ADD_POST'; payload: Post & { habitId: string } }
+    | { type: 'UPDATE_REACTIONS'; payload: { habitId: string; postId: string; reactions: Reaction[] } }
     | { type: 'ADD_COMMENT'; payload: { habitId: string; postId: string; comment: Comment } }
-    | { type: 'JOIN_HABIT'; payload: string }
+    | { type: 'JOIN_HABIT'; payload: { habit: Habit, user: User, streak: HabitStreak } }
     | { type: 'VIEW_HABIT_DETAIL'; payload: Habit }
     | { type: 'CLOSE_HABIT_DETAIL' }
     | { type: 'OPEN_ADD_HABIT_MODAL' }
     | { type: 'CLOSE_ADD_HABIT_MODAL' }
-    | { type: 'ADD_HABIT_STREAK'; payload: { name: string; topic: string } }
+    | { type: 'ADD_HABIT_STREAK'; payload: HabitStreak }
     | { type: 'OPEN_STREAK_DAY_MODAL'; payload: { streakId: string; date: Date; log: StreakLog | null } }
     | { type: 'CLOSE_STREAK_DAY_MODAL' }
-    | { type: 'ADD_STREAK_LOG'; payload: { streakId: string; log: StreakLog } }
+    | { type: 'UPDATE_STREAK_LOG'; payload: { streakId: string; logs: StreakLog[] } }
     | { type: 'OPEN_SETTINGS' }
     | { type: 'CLOSE_SETTINGS' }
     | { type: 'SET_LANGUAGE', payload: Language }
     | { type: 'OPEN_EDIT_PROFILE_MODAL' }
     | { type: 'CLOSE_EDIT_PROFILE_MODAL' }
-    | { type: 'UPDATE_PROFILE'; payload: { name: string, avatar: string | null } }
+    | { type: 'UPDATE_PROFILE'; payload: UserProfile  }
     | { type: 'SELECT_EVENTS' }
     | { type: 'SELECT_MESSAGING_LIST' }
     | { type: 'OPEN_CREATE_EVENT_MODAL' }
     | { type: 'CLOSE_CREATE_EVENT_MODAL' }
-    | { type: 'CREATE_EVENT', payload: Omit<Event, 'id'> }
+    | { type: 'CREATE_EVENT', payload: Event }
     | { type: 'VIEW_EVENT_DETAIL', payload: Event }
     | { type: 'CLOSE_EVENT_DETAIL' }
     | { type: 'OPEN_BOOST_HABIT_MODAL'; payload: string }
@@ -83,11 +81,10 @@ type Action =
     | { type: 'CLOSE_ABOUT_MODAL' }
     | { type: 'OPEN_MESSAGING'; payload: User }
     | { type: 'CLOSE_MESSAGING' }
-    | { type: 'SEND_PRIVATE_MESSAGE'; payload: { recipientId: string; content: string } }
+    | { type: 'UPDATE_CONVERSATIONS'; payload: Conversation[] }
     | { type: 'SELECT_ADMIN_VIEW' }
-    | { type: 'SUBMIT_BOOST_REQUEST'; payload: { habitId: string, proofImage: string } }
-    | { type: 'APPROVE_BOOST_REQUEST'; payload: string } // requestId
-    | { type: 'REJECT_BOOST_REQUEST'; payload: string } // requestId
+    | { type: 'ADD_BOOST_REQUEST'; payload: BoostRequest }
+    | { type: 'UPDATE_BOOST_REQUEST_STATUS'; payload: { requestId: string, status: 'approved' | 'rejected' } }
     | { type: 'SELECT_GROUP_HABITS' }
     | { type: 'SELECT_PRIVATE_HABITS' }
     | { type: 'OPEN_MANAGE_MEMBERS_MODAL'; payload: string }
@@ -97,11 +94,11 @@ type Action =
 const savedTheme = localStorage.getItem('habitcom-theme') || 'light';
 
 const initialState: AppState = {
-    habits: initialHabits,
+    habits: [],
     currentUser: null,
     loggedInUserProfile: null,
-    users: initialUsers,
-    conversations: initialConversations,
+    users: [],
+    conversations: [],
     selectedHabitId: null,
     currentView: 'explore',
     viewingProfileId: null,
@@ -111,7 +108,7 @@ const initialState: AppState = {
     isSettingsOpen: false,
     language: 'id',
     isEditingProfile: false,
-    events: initialEvents,
+    events: [],
     isCreatingEvent: false,
     viewingEventDetail: null,
     boostedHabitId: null,
@@ -127,8 +124,35 @@ const initialState: AppState = {
     isManageMembersModalOpen: { isOpen: false, habitId: null },
 };
 
+// --- Helper to convert Supabase timestamps to Date objects ---
+const parseDates = (data: any, fields: string[]): any => {
+    if (!data) return data;
+    if (Array.isArray(data)) {
+        return data.map(item => parseDates(item, fields));
+    }
+    const newData = { ...data };
+    fields.forEach(field => {
+        if (newData[field]) {
+            newData[field] = new Date(newData[field]);
+        }
+    });
+    // Recursively parse nested objects
+    Object.keys(newData).forEach(key => {
+        if (typeof newData[key] === 'object' && newData[key] !== null) {
+            newData[key] = parseDates(newData[key], fields);
+        }
+    });
+    return newData;
+};
+
+
 function appReducer(state: AppState, action: Action): AppState {
     switch (action.type) {
+        case 'SET_INITIAL_DATA':
+            return {
+                ...state,
+                ...action.payload,
+            };
         case 'LOGIN':
             const userToLogin = action.payload;
             const viewAfterLogin = userToLogin.isAdmin ? 'admin' : 'explore';
@@ -139,43 +163,19 @@ function appReducer(state: AppState, action: Action): AppState {
                 currentUser: userToLogin, 
                 loggedInUserProfile: userToLogin,
                 currentView: viewAfterLogin,
-                viewingProfileId: userToLogin.id,
                 isAuthModalOpen: false,
             };
         case 'LOGOUT':
             window.location.hash = '/explore';
             return {
-                ...state,
-                currentUser: null,
-                loggedInUserProfile: null,
-                currentView: 'explore',
-                selectedHabitId: null,
-                viewingProfileId: null,
-                isSettingsOpen: false,
-            };
-        case 'REGISTER':
-            const newUser = action.payload;
-            window.location.hash = '/explore';
-            return {
-                ...state,
-                users: [...state.users, newUser],
-                currentUser: newUser,
-                loggedInUserProfile: newUser,
-                currentView: 'explore',
-                viewingProfileId: newUser.id,
-                isAuthModalOpen: false,
+                ...initialState, // Reset to initial state on logout
+                language: state.language,
+                theme: state.theme,
             };
         case 'OPEN_AUTH_MODAL':
-            return {
-                ...state,
-                isAuthModalOpen: true,
-                authModalView: action.payload,
-            };
+            return { ...state, isAuthModalOpen: true, authModalView: action.payload };
         case 'CLOSE_AUTH_MODAL':
-            return {
-                ...state,
-                isAuthModalOpen: false,
-            };
+            return { ...state, isAuthModalOpen: false };
         case 'SELECT_HABIT':
             if (!state.currentUser) {
                 return { ...state, isAuthModalOpen: true, authModalView: 'login' };
@@ -197,22 +197,7 @@ function appReducer(state: AppState, action: Action): AppState {
             const newHabit = action.payload;
             if (!state.loggedInUserProfile) return state;
 
-            const newStreak: HabitStreak = {
-                id: `streak_${Date.now()}`,
-                habitId: newHabit.id,
-                name: newHabit.name,
-                topic: newHabit.topic,
-                logs: [],
-            };
-
-            const updatedProfileOnCreate = {
-                    ...state.loggedInUserProfile,
-                    streaks: [...state.loggedInUserProfile.streaks, newStreak],
-            };
-
             const targetView = newHabit.type === 'group' ? 'habit' : 'profile';
-            const targetId = newHabit.type === 'group' ? newHabit.id : state.loggedInUserProfile.id;
-
             if (newHabit.type === 'group') {
                 window.location.hash = `/#/habit/${newHabit.id}`;
             } else {
@@ -222,165 +207,64 @@ function appReducer(state: AppState, action: Action): AppState {
             return {
                 ...state,
                 habits: [newHabit, ...state.habits],
-                loggedInUserProfile: updatedProfileOnCreate,
-                users: state.users.map(u => u.id === state.loggedInUserProfile!.id ? updatedProfileOnCreate : u),
                 selectedHabitId: newHabit.type === 'group' ? newHabit.id : null,
                 currentView: targetView,
                 viewingProfileId: newHabit.type === 'private' ? state.loggedInUserProfile.id : null,
             };
         }
         case 'ADD_POST': {
-            if (!state.currentUser) {
-                 return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-            
-            const habit = state.habits.find(h => h.id === action.payload.habitId);
-            if (!habit) return state;
-
-            const updatedUsersWithNotifications = state.users.map(user => {
-                const isMember = habit.members.some(m => m.id === user.id);
-                if (isMember && user.id !== state.currentUser!.id) {
-                    const newNotification: Notification = {
-                        id: `notif_${Date.now()}_${user.id}`,
-                        type: NotificationType.NEW_POST,
-                        sender: state.currentUser!,
-                        habit: { id: habit.id, name: habit.name },
-                        postContent: action.payload.post.content.substring(0, 30) + '...',
-                        isRead: false,
-                        timestamp: new Date(),
-                    };
-                    return { ...user, notifications: [newNotification, ...user.notifications] };
-                }
-                return user;
-            });
-
+            if (!state.currentUser) return state;
+            const newPost = action.payload;
             return {
                 ...state,
                 habits: state.habits.map(h =>
-                    h.id === action.payload.habitId
-                        ? { ...h, posts: [action.payload.post, ...h.posts].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()) }
+                    h.id === newPost.habitId
+                        ? { ...h, posts: [newPost, ...h.posts].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()) }
                         : h
                 ),
-                users: updatedUsersWithNotifications,
-                loggedInUserProfile: updatedUsersWithNotifications.find(u => u.id === state.loggedInUserProfile?.id) || state.loggedInUserProfile,
             };
         }
-        case 'ADD_REACTION': {
-             if (!state.currentUser) {
-                return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-
-            const habit = state.habits.find(h => h.id === action.payload.habitId);
-            const post = habit?.posts.find(p => p.id === action.payload.postId);
-            if (!post || !habit || post.author.id === state.currentUser.id) return state; // Don't notify for self-reactions
-            
-            let usersWithNewNotification = state.users;
-            const postAuthorProfile = state.users.find(u => u.id === post.author.id);
-            if (postAuthorProfile) {
-                const newNotification: Notification = {
-                    id: `notif_${Date.now()}`,
-                    type: NotificationType.NEW_REACTION,
-                    sender: state.currentUser,
-                    habit: { id: habit.id, name: habit.name },
-                    reactionType: action.payload.reactionType,
-                    isRead: false,
-                    timestamp: new Date(),
-                };
-                usersWithNewNotification = state.users.map(u => u.id === post.author.id ? { ...u, notifications: [newNotification, ...u.notifications] } : u);
-            }
-
+        case 'UPDATE_REACTIONS': {
+             if (!state.currentUser) return state;
             return {
                 ...state,
                 habits: state.habits.map(h => {
                     if (h.id !== action.payload.habitId) return h;
                     return {
                         ...h,
-                        posts: h.posts.map(p => {
-                            if (p.id !== action.payload.postId) return p;
-                            const reactionIndex = p.reactions.findIndex(r => r.userId === state.currentUser!.id);
-                            if (reactionIndex > -1) {
-                                if (p.reactions[reactionIndex].type === action.payload.reactionType) {
-                                    return { ...p, reactions: p.reactions.filter(r => r.userId !== state.currentUser!.id) };
-                                } else {
-                                     return { ...p, reactions: [...p.reactions.filter(r => r.userId !== state.currentUser!.id), { userId: state.currentUser!.id, type: action.payload.reactionType }] };
-                                }
-                            } else {
-                                return { ...p, reactions: [...p.reactions, { userId: state.currentUser!.id, type: action.payload.reactionType }] };
-                            }
-                        }),
+                        posts: h.posts.map(p => 
+                            p.id !== action.payload.postId ? p : { ...p, reactions: action.payload.reactions }
+                        ),
                     };
                 }),
-                users: usersWithNewNotification,
-                loggedInUserProfile: usersWithNewNotification.find(u => u.id === state.loggedInUserProfile?.id) || state.loggedInUserProfile,
             };
         }
         case 'ADD_COMMENT': {
-            if (!state.currentUser) {
-                return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
+            if (!state.currentUser) return state;
             return {
                 ...state,
                 habits: state.habits.map(h => 
                     h.id === action.payload.habitId
-                    ? {
-                        ...h,
-                        posts: h.posts.map(p => 
-                            p.id === action.payload.postId
-                            ? { ...p, comments: [...p.comments, action.payload.comment] }
-                            : p
-                        )
-                    }
+                    ? { ...h, posts: h.posts.map(p => p.id === action.payload.postId ? { ...p, comments: [...p.comments, action.payload.comment] } : p ) }
                     : h
                 )
             };
         }
         case 'JOIN_HABIT': {
-            if (!state.currentUser || !state.loggedInUserProfile) {
-                return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-            const habitToJoin = state.habits.find(h => h.id === action.payload);
-            if (!habitToJoin || habitToJoin.members.some(m => m.id === state.currentUser!.id) || habitToJoin.members.length >= habitToJoin.memberLimit) {
-                return { ...state, viewingHabitDetail: null };
-            }
-
-            const newStreak: HabitStreak = {
-                id: `streak_${habitToJoin.id}_${state.currentUser.id}`,
-                habitId: habitToJoin.id,
-                name: habitToJoin.name,
-                topic: habitToJoin.topic,
-                logs: [],
-            };
+            if (!state.currentUser || !state.loggedInUserProfile) return state;
             
-            const usersWithJoinNotif = state.users.map(user => {
-                if (habitToJoin.members.some(m => m.id === user.id)) {
-                     const newNotification: Notification = {
-                        id: `notif_join_${Date.now()}_${user.id}`,
-                        type: NotificationType.NEW_MEMBER,
-                        sender: state.currentUser!,
-                        habit: { id: habitToJoin.id, name: habitToJoin.name },
-                        isRead: false,
-                        timestamp: new Date(),
-                    };
-                    return { ...user, notifications: [newNotification, ...user.notifications] };
-                }
-                return user;
-            });
-
-            const updatedProfileOnJoin = {
-                ...state.loggedInUserProfile,
-                streaks: [...state.loggedInUserProfile.streaks, newStreak]
-            };
-
-            window.location.hash = `/#/habit/${action.payload}`;
+            window.location.hash = `/#/habit/${action.payload.habit.id}`;
 
             return {
                 ...state,
                 habits: state.habits.map(h =>
-                    h.id === action.payload ? { ...h, members: [...h.members, state.currentUser!] } : h
+                    h.id === action.payload.habit.id ? { ...h, members: [...h.members, action.payload.user] } : h
                 ),
-                loggedInUserProfile: updatedProfileOnJoin,
-                users: usersWithJoinNotif.map(u => u.id === state.currentUser!.id ? updatedProfileOnJoin : u),
-                selectedHabitId: action.payload,
+                loggedInUserProfile: {
+                    ...state.loggedInUserProfile,
+                    streaks: [...state.loggedInUserProfile.streaks, action.payload.streak]
+                },
+                selectedHabitId: action.payload.habit.id,
                 currentView: 'habit',
                 viewingHabitDetail: null,
             };
@@ -396,21 +280,12 @@ function appReducer(state: AppState, action: Action): AppState {
             return { ...state, isAddingHabit: false };
         case 'ADD_HABIT_STREAK': {
             if (!state.loggedInUserProfile) return state;
-            const newStreak: HabitStreak = {
-                id: `streak_${Date.now()}`,
-                habitId: '', // No associated group habit
-                name: action.payload.name,
-                topic: action.payload.topic,
-                logs: [],
-            };
-            const updatedProfileWithNewStreak = {
-                ...state.loggedInUserProfile,
-                streaks: [...state.loggedInUserProfile.streaks, newStreak],
-            };
             return {
                 ...state,
-                loggedInUserProfile: updatedProfileWithNewStreak,
-                users: state.users.map(u => u.id === state.loggedInUserProfile!.id ? updatedProfileWithNewStreak : u),
+                loggedInUserProfile: {
+                    ...state.loggedInUserProfile,
+                    streaks: [...state.loggedInUserProfile.streaks, action.payload],
+                },
                 isAddingHabit: false,
             };
         }
@@ -418,26 +293,16 @@ function appReducer(state: AppState, action: Action): AppState {
             return { ...state, streakDayModal: { isOpen: true, ...action.payload } };
         case 'CLOSE_STREAK_DAY_MODAL':
             return { ...state, streakDayModal: { isOpen: false, streakId: null, date: null, log: null } };
-        case 'ADD_STREAK_LOG': {
+        case 'UPDATE_STREAK_LOG': {
             if (!state.loggedInUserProfile) return state;
-            
-            const updateUserLogs = (profile: UserProfile): UserProfile => ({
-                ...profile,
-                streaks: profile.streaks.map(streak => {
-                    if (streak.id !== action.payload.streakId) return streak;
-                    const existingLogs = streak.logs.filter(log => log.date.toDateString() !== action.payload.log.date.toDateString());
-                    return {
-                        ...streak,
-                        logs: [...existingLogs, action.payload.log].sort((a,b) => a.date.getTime() - b.date.getTime()),
-                    };
-                }),
-            });
-
-            const updatedProfile = updateUserLogs(state.loggedInUserProfile);
+            const updatedProfile = {
+                ...state.loggedInUserProfile,
+                streaks: state.loggedInUserProfile.streaks.map(s => s.id === action.payload.streakId ? { ...s, logs: action.payload.logs } : s)
+            };
             return {
                 ...state,
                 loggedInUserProfile: updatedProfile,
-                users: state.users.map(u => u.id === state.loggedInUserProfile!.id ? updatedProfile : u),
+                users: state.users.map(u => u.id === updatedProfile.id ? updatedProfile : u),
                 streakDayModal: { isOpen: false, streakId: null, date: null, log: null },
             };
         }
@@ -446,43 +311,28 @@ function appReducer(state: AppState, action: Action): AppState {
         case 'CLOSE_SETTINGS':
             return { ...state, isSettingsOpen: false };
         case 'SET_LANGUAGE':
-            return {
-                ...state,
-                language: action.payload
-            };
+            return { ...state, language: action.payload };
         case 'OPEN_EDIT_PROFILE_MODAL':
             return { ...state, isEditingProfile: true };
         case 'CLOSE_EDIT_PROFILE_MODAL':
             return { ...state, isEditingProfile: false };
         case 'UPDATE_PROFILE': {
-            if (!state.currentUser || !state.loggedInUserProfile) return state;
-            const { name, avatar } = action.payload;
-
-            const updatedAvatar = avatar || state.currentUser.avatar;
-            
-            const updatedProfileForChanges = { ...state.loggedInUserProfile, name, avatar: updatedAvatar };
-            
-            const updateUserInState = (user: User) => {
-                if (user.id === state.currentUser!.id) {
-                    return { ...user, name, avatar: updatedAvatar };
-                }
-                return user;
-            };
-
+            if (!state.currentUser) return state;
+            const updatedProfile = action.payload;
             return {
                 ...state,
-                currentUser: updateUserInState(state.currentUser) as UserProfile,
-                loggedInUserProfile: updatedProfileForChanges,
-                users: state.users.map(u => u.id === state.currentUser!.id ? { ...u, name, avatar: updatedAvatar } : u),
-                habits: state.habits.map(habit => ({
+                currentUser: updatedProfile,
+                loggedInUserProfile: updatedProfile,
+                users: state.users.map(u => u.id === updatedProfile.id ? updatedProfile : u),
+                 habits: state.habits.map(habit => ({
                     ...habit,
-                    members: habit.members.map(member => updateUserInState(member) as User),
+                    members: habit.members.map(member => member.id === updatedProfile.id ? { ...member, name: updatedProfile.name, avatar: updatedProfile.avatar } : member),
                     posts: habit.posts.map(post => ({
                         ...post,
-                        author: updateUserInState(post.author) as User,
+                        author: post.author.id === updatedProfile.id ? { ...post.author, name: updatedProfile.name, avatar: updatedProfile.avatar } : post.author,
                         comments: post.comments.map(comment => ({
                             ...comment,
-                            author: updateUserInState(comment.author) as User,
+                            author: comment.author.id === updatedProfile.id ? { ...comment.author, name: updatedProfile.name, avatar: updatedProfile.avatar } : comment.author,
                         }))
                     }))
                 })),
@@ -504,12 +354,7 @@ function appReducer(state: AppState, action: Action): AppState {
         case 'CLOSE_CREATE_EVENT_MODAL':
             return { ...state, isCreatingEvent: false };
         case 'CREATE_EVENT':
-            const newEvent: Event = { ...action.payload, id: `event_${Date.now()}` };
-            return {
-                ...state,
-                events: [newEvent, ...state.events],
-                isCreatingEvent: false,
-            };
+            return { ...state, events: [action.payload, ...state.events], isCreatingEvent: false };
         case 'VIEW_EVENT_DETAIL':
             return { ...state, viewingEventDetail: action.payload };
         case 'CLOSE_EVENT_DETAIL':
@@ -519,11 +364,7 @@ function appReducer(state: AppState, action: Action): AppState {
         case 'CLOSE_BOOST_HABIT_MODAL':
             return { ...state, isBoostingHabit: { isOpen: false, habitId: null } };
         case 'BOOST_HABIT':
-            return {
-                ...state,
-                boostedHabitId: action.payload,
-                isBoostingHabit: { isOpen: false, habitId: null },
-            };
+            return { ...state, boostedHabitId: action.payload, isBoostingHabit: { isOpen: false, habitId: null } };
         case 'SET_THEME':
             return { ...state, theme: action.payload };
         case 'OPEN_PRIVACY_POLICY':
@@ -542,92 +383,30 @@ function appReducer(state: AppState, action: Action): AppState {
             return { ...state, isMessaging: { isOpen: true, recipient: action.payload }};
         case 'CLOSE_MESSAGING':
             return { ...state, isMessaging: { isOpen: false, recipient: null }};
-        case 'SEND_PRIVATE_MESSAGE': {
-            if (!state.currentUser) return state;
-            const { recipientId, content } = action.payload;
-
-            const conversationId = [state.currentUser.id, recipientId].sort().join('-');
-            const newMessage: PrivateMessage = {
-                id: `msg_${Date.now()}`,
-                senderId: state.currentUser.id,
-                content,
-                timestamp: new Date(),
-            };
-
-            const recipientProfile = state.users.find(u => u.id === recipientId);
-            let updatedUsersWithMessage = state.users;
-
-            if (recipientProfile) {
-                const newNotification: Notification = {
-                    id: `notif_msg_${Date.now()}`,
-                    type: NotificationType.NEW_MESSAGE,
-                    sender: state.currentUser,
-                    isRead: false,
-                    timestamp: new Date(),
-                };
-                 updatedUsersWithMessage = state.users.map(u => u.id === recipientId ? { ...u, notifications: [newNotification, ...u.notifications] } : u);
-            }
-
-            const existingConversation = state.conversations.find(c => c.id === conversationId);
-            
-            let updatedConversations;
-            if (existingConversation) {
-                 updatedConversations = state.conversations.map(c => 
-                    c.id === conversationId 
-                    ? { ...c, messages: [...c.messages, newMessage] } 
-                    : c
-                );
-            } else {
-                const newConversation: Conversation = {
-                    id: conversationId,
-                    participantIds: [state.currentUser.id, recipientId],
-                    messages: [newMessage],
-                };
-                updatedConversations = [...state.conversations, newConversation];
-            }
-            return { 
-                ...state, 
-                conversations: updatedConversations,
-                users: updatedUsersWithMessage,
-                loggedInUserProfile: updatedUsersWithMessage.find(u => u.id === state.loggedInUserProfile?.id) || state.loggedInUserProfile,
-            };
-        }
+        case 'UPDATE_CONVERSATIONS':
+            return { ...state, conversations: action.payload };
         case 'SELECT_ADMIN_VIEW':
             if (!state.currentUser?.isAdmin) return state;
             return { ...state, currentView: 'admin', selectedHabitId: null, viewingProfileId: null };
 
-        case 'SUBMIT_BOOST_REQUEST':
-            if (!state.currentUser) return state;
-            const newRequest: BoostRequest = {
-                id: `br_${Date.now()}`,
-                habitId: action.payload.habitId,
-                userId: state.currentUser.id,
-                proofImage: action.payload.proofImage,
-                status: 'pending',
-                timestamp: new Date(),
-            };
+        case 'ADD_BOOST_REQUEST':
             return {
                 ...state,
-                boostRequests: [...state.boostRequests, newRequest],
+                boostRequests: [...state.boostRequests, action.payload],
                 isBoostingHabit: { isOpen: false, habitId: null },
             };
         
-        case 'APPROVE_BOOST_REQUEST': {
-            const requestToApprove = state.boostRequests.find(r => r.id === action.payload);
-            if (!requestToApprove) return state;
+        case 'UPDATE_BOOST_REQUEST_STATUS': {
+            const { requestId, status } = action.payload;
+            const requestToUpdate = state.boostRequests.find(r => r.id === requestId);
+            if (!requestToUpdate) return state;
 
             return {
                 ...state,
-                boostRequests: state.boostRequests.map(r => r.id === action.payload ? { ...r, status: 'approved' } : r),
-                boostedHabitId: requestToApprove.habitId, // Set the habit of the day
+                boostRequests: state.boostRequests.map(r => r.id === requestId ? { ...r, status } : r),
+                boostedHabitId: status === 'approved' ? requestToUpdate.habitId : state.boostedHabitId,
             };
         }
-
-        case 'REJECT_BOOST_REQUEST':
-            return {
-                ...state,
-                boostRequests: state.boostRequests.map(r => r.id === action.payload ? { ...r, status: 'rejected' } : r),
-            };
         case 'SELECT_GROUP_HABITS':
             if (!state.currentUser) {
                 return { ...state, isAuthModalOpen: true, authModalView: 'login' };
@@ -640,15 +419,9 @@ function appReducer(state: AppState, action: Action): AppState {
             return { ...state, currentView: 'privateHabits', selectedHabitId: null, viewingProfileId: null };
         
         case 'OPEN_MANAGE_MEMBERS_MODAL':
-            return {
-                ...state,
-                isManageMembersModalOpen: { isOpen: true, habitId: action.payload },
-            };
+            return { ...state, isManageMembersModalOpen: { isOpen: true, habitId: action.payload } };
         case 'CLOSE_MANAGE_MEMBERS_MODAL':
-            return {
-                ...state,
-                isManageMembersModalOpen: { isOpen: false, habitId: null },
-            };
+            return { ...state, isManageMembersModalOpen: { isOpen: false, habitId: null } };
         case 'KICK_MEMBER': {
             const { habitId, userId } = action.payload;
             
@@ -658,23 +431,12 @@ function appReducer(state: AppState, action: Action): AppState {
                 : h
             );
 
-            const updatedUsers = state.users.map(u => {
-                if (u.id === userId) {
-                    return { ...u, streaks: u.streaks.filter(s => s.habitId !== habitId) };
-                }
-                return u;
-            });
+             const updatedProfile = state.users.find(u => u.id === userId);
+             if (updatedProfile) {
+                updatedProfile.streaks = updatedProfile.streaks.filter(s => s.habitId !== habitId);
+             }
 
-            const updatedLoggedInUserProfile = state.loggedInUserProfile?.id === userId 
-                ? updatedUsers.find(u => u.id === userId) || state.loggedInUserProfile
-                : state.loggedInUserProfile;
-
-            return {
-                ...state,
-                habits: updatedHabits,
-                users: updatedUsers,
-                loggedInUserProfile: updatedLoggedInUserProfile
-            };
+            return { ...state, habits: updatedHabits };
         }
         default:
             return state;
@@ -686,10 +448,70 @@ function appReducer(state: AppState, action: Action): AppState {
 export default function App() {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [postContent, setPostContent] = useState('');
-  const [postImage, setPostImage] = useState<string | null>(null);
+  const [postImage, setPostImage] = useState<string | null>(null); // For base64 preview
 
   const { habits, currentUser, loggedInUserProfile, users, conversations, selectedHabitId, currentView, viewingProfileId, viewingHabitDetail, isAddingHabit, streakDayModal, isSettingsOpen, language, isEditingProfile, events, isCreatingEvent, viewingEventDetail, boostedHabitId, isBoostingHabit, theme, isPrivacyPolicyOpen, isTermsConditionsOpen, isAboutModalOpen, isMessaging, isAuthModalOpen, authModalView, boostRequests, isManageMembersModalOpen } = state;
   const t = (key: keyof typeof translations.id) => translations[language][key] || key;
+
+  // --- AUTH & DATA FETCHING ---
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        if (profile) {
+            dispatch({ type: 'LOGIN', payload: parseDates(profile, ['memberSince']) as UserProfile });
+        }
+      } else {
+        dispatch({ type: 'LOGOUT' });
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    const { data: habitsData, error: habitsError } = await supabase.from('habits').select('*, members:profiles(*), posts(*, author:profiles(*), comments(*, author:profiles(*)), reactions(*))');
+    const { data: usersData, error: usersError } = await supabase.from('profiles').select('*, streaks(*)');
+    const { data: eventsData, error: eventsError } = await supabase.from('events').select('*');
+    const { data: boostRequestsData, error: boostRequestsError } = await supabase.from('boost_requests').select('*');
+    // More fetches can be added here (conversations etc.)
+    
+    if (habitsError || usersError || eventsError || boostRequestsError) {
+        console.error(habitsError || usersError || eventsError || boostRequestsError);
+        return;
+    }
+
+    dispatch({
+        type: 'SET_INITIAL_DATA',
+        payload: {
+            habits: parseDates(habitsData, ['timestamp']),
+            users: parseDates(usersData, ['memberSince']),
+            events: parseDates(eventsData, []),
+            conversations: [], // Placeholder for now
+            boostRequests: parseDates(boostRequestsData, ['timestamp']),
+        }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+        fetchData();
+    }
+  }, [currentUser, fetchData]);
+
+  // --- REALTIME SUBSCRIPTIONS ---
+  useEffect(() => {
+    const channels = supabase.channel('realtime-all');
+    channels
+        .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+            fetchData(); // Refetch all data on any change
+        })
+        .subscribe();
+
+    return () => {
+        supabase.removeChannel(channels);
+    };
+  }, [fetchData]);
+
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -742,135 +564,150 @@ export default function App() {
 
   const selectedHabit = habits.find(h => h.id === selectedHabitId);
 
-  const handleLogin = (email: string, pass: string) => {
-      // Dummy user validation
-      const dummyUser = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
-       if (dummyUser && (pass === 'password123' || (dummyUser.isAdmin && pass === 'adminpass'))) {
-          dispatch({ type: 'LOGIN', payload: dummyUser });
-      } else {
-          alert(t('invalidCredentials'));
+  // --- HANDLERS ---
+  const handleLogin = async (email: string, pass: string) => {
+      const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      if (error) alert(error.message);
+  };
+
+  const handleRegister = async (name: string, email: string, pass: string) => {
+      const { data: authData, error: authError } = await supabase.auth.signUp({ email, password: pass });
+      if (authError) {
+          alert(authError.message);
+          return;
+      }
+      if (authData.user) {
+          const { error: profileError } = await supabase.from('profiles').insert({
+              id: authData.user.id,
+              name,
+              avatar: `https://i.pravatar.cc/150?u=${authData.user.id}`,
+              motto: "New to HabitComm!",
+              memberSince: new Date().toISOString(),
+          });
+          if (profileError) alert(profileError.message);
       }
   };
-
-  const handleRegister = (name: string, email: string) => {
-      const newUser: UserProfile = {
-          id: `user_${Date.now()}`,
-          name,
-          email,
-          avatar: `https://i.pravatar.cc/150?u=user_${Date.now()}`,
-          motto: "New to HabitComm!",
-          memberSince: new Date(),
-          totalDaysActive: 0,
-          level: "Novice",
-          cheersGiven: 0,
-          pushesGiven: 0,
-          checkInPercentage: 0,
-          streaks: [],
-          badges: [],
-          notifications: [],
-      };
-      dispatch({ type: 'REGISTER', payload: newUser });
+  
+   const handleLogout = async () => {
+    await supabase.auth.signOut();
+    dispatch({ type: 'LOGOUT' });
   };
+  
+  const dataURLtoBlob = (dataurl: string) => {
+    const arr = dataurl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    if (!mimeMatch) return null;
+    const mime = mimeMatch[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while(n--){
+        u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], {type:mime});
+  }
 
   const handleImageSelect = (file: File) => {
-    const MAX_SIZE = 2 * 1024 * 1024; // 2MB
-    
-    const compressImage = (imageFile: File) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target?.result as string;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                if (!ctx) return;
-
-                const MAX_WIDTH = 1024;
-                const MAX_HEIGHT = 1024;
-                let width = img.width;
-                let height = img.height;
-
-                if (width > height) {
-                    if (width > MAX_WIDTH) {
-                        height *= MAX_WIDTH / width;
-                        width = MAX_WIDTH;
-                    }
-                } else {
-                    if (height > MAX_HEIGHT) {
-                        width *= MAX_HEIGHT / height;
-                        height = MAX_HEIGHT;
-                    }
-                }
-                
-                canvas.width = width;
-                canvas.height = height;
-                ctx.drawImage(img, 0, 0, width, height);
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-                setPostImage(dataUrl);
-            };
-        };
-        reader.readAsDataURL(imageFile);
-    };
-
-    if (file.size > MAX_SIZE) {
-        compressImage(file);
-    } else {
         const reader = new FileReader();
         reader.onloadend = () => {
-            setPostImage(reader.result as string);
+            setPostImage(reader.result as string); // Set base64 for preview
         };
         reader.readAsDataURL(file);
-    }
   };
 
   const handlePostSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!postContent.trim() && !postImage) || !selectedHabit || !currentUser) return;
+    
+    let imageUrl: string | undefined = undefined;
 
-    const newPost: Post = {
-      id: `post_${Date.now()}`,
-      author: currentUser,
+    if (postImage) {
+        const blob = dataURLtoBlob(postImage);
+        if (blob) {
+            const filePath = `posts/${currentUser.id}/${Date.now()}.jpg`;
+            const { error: uploadError } = await supabase.storage.from('images').upload(filePath, blob);
+            if (uploadError) {
+                console.error("Upload error:", uploadError);
+            } else {
+                const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(filePath);
+                imageUrl = publicUrl;
+            }
+        }
+    }
+
+    const { data: newPost, error } = await supabase.from('posts').insert({
+      authorId: currentUser.id,
+      habitId: selectedHabit.id,
       content: postContent,
-      imageUrl: postImage || undefined,
-      streak: Math.floor(Math.random() * 30) + 1,
-      reactions: [],
-      comments: [],
-      timestamp: new Date(),
-    };
+      imageUrl,
+      streak: 0, // Should be calculated
+      timestamp: new Date().toISOString(),
+    }).select('*, author:profiles(*)').single();
 
-    dispatch({ type: 'ADD_POST', payload: { habitId: selectedHabit.id, post: newPost } });
-    setPostContent('');
-    setPostImage(null);
+    if (error) {
+        console.error(error);
+    } else if (newPost) {
+        // Optimistic update handled by realtime subscription
+        setPostContent('');
+        setPostImage(null);
+    }
   };
   
-  const handleCreateHabit = (habitData: Omit<Habit, 'id'|'members'|'posts'|'memberLimit'|'highlightIcon'|'creatorId'>) => {
+  const handleCreateHabit = async (habitData: Omit<Habit, 'id'|'members'|'posts'|'memberLimit'|'highlightIcon'|'creatorId'>, coverImageFile: File | null) => {
       if (!currentUser) return;
-      const newHabit: Habit = {
+
+      let coverImageUrl: string | undefined = undefined;
+      if (coverImageFile) {
+          const filePath = `covers/${currentUser.id}/${Date.now()}_${coverImageFile.name}`;
+          await supabase.storage.from('images').upload(filePath, coverImageFile);
+          const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(filePath);
+          coverImageUrl = publicUrl;
+      }
+
+      const { data: newHabit, error } = await supabase.from('habits').insert({
           ...habitData,
-          id: `habit_${Date.now()}`,
           creatorId: currentUser.id,
-          members: [currentUser],
-          posts: [],
           memberLimit: 20,
-      };
-      dispatch({ type: 'CREATE_HABIT', payload: newHabit });
+          coverImage: coverImageUrl,
+      }).select().single();
+
+      if (error) console.error(error);
+      // Further actions like adding member and streak are handled by realtime/refetch
   };
   
-  const handleReaction = (postId: string, reactionType: ReactionType, habitId?: string) => {
-    const targetHabitId = habitId || selectedHabitId;
-    if (!targetHabitId) return;
-    dispatch({ type: 'ADD_REACTION', payload: { habitId: targetHabitId, postId, reactionType } });
+  const handleReaction = async (postId: string, reactionType: ReactionType) => {
+    if(!currentUser || !selectedHabitId) return;
+
+    const { data: existingReaction, error: fetchError } = await supabase.from('reactions')
+      .select('id, type')
+      .eq('postId', postId)
+      .eq('userId', currentUser.id)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') { // Ignore "no rows" error
+      console.error(fetchError);
+      return;
+    }
+
+    if (existingReaction) {
+        if (existingReaction.type === reactionType) { // Un-react
+            await supabase.from('reactions').delete().match({ id: existingReaction.id });
+        } else { // Change reaction
+             await supabase.from('reactions').update({ type: reactionType }).match({ id: existingReaction.id });
+        }
+    } else { // New reaction
+        await supabase.from('reactions').insert({ postId, userId: currentUser.id, type: reactionType });
+    }
   }
 
-  const handleCommentSubmit = (habitId: string, postId: string, content: string) => {
+  const handleCommentSubmit = async (habitId: string, postId: string, content: string) => {
       if (!currentUser || !content.trim()) return;
-      const newComment: Comment = {
-          id: `comment_${Date.now()}`,
-          author: currentUser,
-          content,
-          timestamp: new Date(),
-      };
-      dispatch({ type: 'ADD_COMMENT', payload: { habitId, postId, comment: newComment } });
+      await supabase.from('comments').insert({ postId, authorId: currentUser.id, content, timestamp: new Date().toISOString() });
+  };
+  
+  const handleJoinHabit = async (habitId: string) => {
+      if (!currentUser) return;
+      await supabase.from('habit_members').insert({ habitId, userId: currentUser.id });
   };
 
   const handleDayClick = (streakId: string, date: Date) => {
@@ -878,12 +715,25 @@ export default function App() {
     if (!profile) return;
     const streak = profile.streaks.find(s => s.id === streakId);
     if (!streak) return;
-    const log = streak.logs.find(l => l.date.toDateString() === date.toDateString()) || null;
+    const log = streak.logs.find(l => new Date(l.date).toDateString() === date.toDateString()) || null;
     dispatch({ type: 'OPEN_STREAK_DAY_MODAL', payload: { streakId, date, log } });
   };
   
-  const handleCreateEvent = (eventData: Omit<Event, 'id'>) => {
-    dispatch({ type: 'CREATE_EVENT', payload: eventData });
+  const handleAddStreakLog = async (streakId: string, log: StreakLog) => {
+      if (!loggedInUserProfile) return;
+      const streak = loggedInUserProfile.streaks.find(s => s.id === streakId);
+      if (!streak) return;
+      
+      const existingLogs = streak.logs.filter(l => new Date(l.date).toDateString() !== log.date.toDateString());
+      const updatedLogs = [...existingLogs, log].sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      const { error } = await supabase.from('streaks').update({ logs: updatedLogs }).eq('id', streakId);
+      if (error) console.error(error);
+      else dispatch({ type: 'UPDATE_STREAK_LOG', payload: { streakId, logs: updatedLogs } });
+  };
+
+  const handleCreateEvent = async (eventData: Omit<Event, 'id'>) => {
+      await supabase.from('events').insert(eventData);
   };
   
   const handleBoostHabit = (habitId: string) => {
@@ -892,14 +742,39 @@ export default function App() {
   
   const handleSendMessage = (content: string) => {
     if (!isMessaging.recipient) return;
-    dispatch({ type: 'SEND_PRIVATE_MESSAGE', payload: { recipientId: isMessaging.recipient.id, content } });
+    // Messaging logic needs to be fully implemented with conversations table
+    console.log("Sending message...", { recipient: isMessaging.recipient.id, content });
   };
 
-  const handleBoostSubmit = (proofImage: string) => {
-    if (isBoostingHabit.habitId) {
-      dispatch({ type: 'SUBMIT_BOOST_REQUEST', payload: { habitId: isBoostingHabit.habitId, proofImage } });
-    }
+  const handleBoostSubmit = async (habitId: string, proofImageFile: File) => {
+    if (!currentUser) return;
+    const filePath = `boosts/${currentUser.id}/${Date.now()}_${proofImageFile.name}`;
+    await supabase.storage.from('images').upload(filePath, proofImageFile);
+    const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(filePath);
+    
+    await supabase.from('boost_requests').insert({
+        habitId,
+        userId: currentUser.id,
+        proofImage: publicUrl,
+        status: 'pending',
+        timestamp: new Date().toISOString()
+    });
   };
+  
+  const handleUpdateProfile = async (name: string, avatarFile: File | null) => {
+      if(!loggedInUserProfile) return;
+      let avatarUrl = loggedInUserProfile.avatar;
+
+      if(avatarFile) {
+          const filePath = `avatars/${loggedInUserProfile.id}/${Date.now()}_${avatarFile.name}`;
+          await supabase.storage.from('images').upload(filePath, avatarFile, { upsert: true });
+          const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(filePath);
+          avatarUrl = publicUrl;
+      }
+      const { data, error } = await supabase.from('profiles').update({ name, avatar: avatarUrl }).eq('id', loggedInUserProfile.id).select().single();
+      if(data) dispatch({ type: 'UPDATE_PROFILE', payload: data as UserProfile });
+      if(error) console.error(error);
+  }
 
   const renderMainView = () => {
     const allUserHabits = loggedInUserProfile ? habits.filter(h => h.members.some(m => m.id === loggedInUserProfile!.id)) : [];
@@ -909,8 +784,8 @@ export default function App() {
                 requests={boostRequests}
                 habits={habits}
                 users={users}
-                onApprove={(id) => dispatch({ type: 'APPROVE_BOOST_REQUEST', payload: id })}
-                onReject={(id) => dispatch({ type: 'REJECT_BOOST_REQUEST', payload: id })}
+                onApprove={async (id) => await supabase.from('boost_requests').update({ status: 'approved' }).eq('id', id)}
+                onReject={async (id) => await supabase.from('boost_requests').update({ status: 'rejected' }).eq('id', id)}
                 t={t}
             />;
         case 'profile': {
@@ -939,7 +814,7 @@ export default function App() {
                  return <ExploreView 
                         allHabits={habits}
                         currentUser={currentUser} 
-                        onJoinHabit={(id) => dispatch({ type: 'JOIN_HABIT', payload: id })} 
+                        onJoinHabit={handleJoinHabit} 
                         onViewDetail={(habit) => dispatch({ type: 'VIEW_HABIT_DETAIL', payload: habit })}
                         t={t}
                         boostedHabitId={boostedHabitId}
@@ -997,7 +872,7 @@ export default function App() {
             return <ExploreView 
                         allHabits={habits}
                         currentUser={currentUser} 
-                        onJoinHabit={(id) => dispatch({ type: 'JOIN_HABIT', payload: id })} 
+                        onJoinHabit={handleJoinHabit} 
                         onViewDetail={(habit) => dispatch({ type: 'VIEW_HABIT_DETAIL', payload: habit })}
                         t={t}
                         boostedHabitId={boostedHabitId}
@@ -1007,7 +882,7 @@ export default function App() {
 
 
   return (
-    <div className="h-full max-w-[1100px] mx-auto flex flex-col font-sans bg-white dark:bg-neutral-900 rounded-xl overflow-hidden shadow-2xl border border-border-color dark:border-neutral-800">
+    <div className="h-full max-w-[1100px] mx-auto flex flex-col font-sans bg-white dark:bg-neutral-900 md:rounded-xl overflow-hidden md:shadow-2xl md:border border-border-color dark:border-neutral-800 md:my-4">
         {isAuthModalOpen && (
             <AuthModal
                 initialView={authModalView}
@@ -1022,7 +897,7 @@ export default function App() {
                 habit={state.habits.find(h => h.id === isManageMembersModalOpen.habitId)!}
                 currentUser={currentUser}
                 onClose={() => dispatch({ type: 'CLOSE_MANAGE_MEMBERS_MODAL' })}
-                onKickMember={(userId) => dispatch({ type: 'KICK_MEMBER', payload: { habitId: isManageMembersModalOpen.habitId!, userId } })}
+                onKickMember={async (userId) => await supabase.from('habit_members').delete().match({ habitId: isManageMembersModalOpen.habitId, userId })}
                 t={t}
             />
         )}
@@ -1030,14 +905,17 @@ export default function App() {
         <HabitDetailModal 
           habit={viewingHabitDetail} 
           onClose={() => dispatch({ type: 'CLOSE_HABIT_DETAIL'})}
-          onJoin={(id) => dispatch({ type: 'JOIN_HABIT', payload: id })}
+          onJoin={handleJoinHabit}
           isMember={currentUser ? viewingHabitDetail.members.some(m => m.id === currentUser.id) : false}
           t={t}
         />}
         {isAddingHabit && (
             <AddHabitModal 
                 onClose={() => dispatch({type: 'CLOSE_ADD_HABIT_MODAL'})}
-                onSave={(data) => dispatch({type: 'ADD_HABIT_STREAK', payload: data })}
+                onSave={async (data) => {
+                    if(!loggedInUserProfile) return;
+                    await supabase.from('streaks').insert({ ...data, userId: loggedInUserProfile.id, logs: [] });
+                }}
                 t={t}
             />
         )}
@@ -1046,7 +924,7 @@ export default function App() {
                 date={streakDayModal.date}
                 log={streakDayModal.log}
                 onClose={() => dispatch({type: 'CLOSE_STREAK_DAY_MODAL'})}
-                onSave={(note) => dispatch({type: 'ADD_STREAK_LOG', payload: { streakId: streakDayModal.streakId!, log: { date: streakDayModal.date!, note }} })}
+                onSave={(note) => handleAddStreakLog(streakDayModal.streakId!, { date: streakDayModal.date!, note })}
                 t={t}
                 language={language}
             />
@@ -1054,7 +932,7 @@ export default function App() {
         {isSettingsOpen && (
             <SettingsModal
                 onClose={() => dispatch({type: 'CLOSE_SETTINGS'})}
-                onLogout={() => dispatch({ type: 'LOGOUT' })}
+                onLogout={handleLogout}
                 currentLanguage={language}
                 onLanguageChange={(lang) => dispatch({type: 'SET_LANGUAGE', payload: lang})}
                 currentTheme={theme}
@@ -1069,7 +947,7 @@ export default function App() {
             <EditProfileModal
                 currentUser={loggedInUserProfile}
                 onClose={() => dispatch({ type: 'CLOSE_EDIT_PROFILE_MODAL' })}
-                onSave={(name, avatar) => dispatch({ type: 'UPDATE_PROFILE', payload: { name, avatar } })}
+                onSave={handleUpdateProfile}
                 t={t}
             />
         )}
@@ -1092,7 +970,7 @@ export default function App() {
             <BoostHabitModal
                 habit={state.habits.find(h => h.id === isBoostingHabit.habitId)!}
                 onClose={() => dispatch({ type: 'CLOSE_BOOST_HABIT_MODAL' })}
-                onSubmit={handleBoostSubmit}
+                onSubmit={(file) => handleBoostSubmit(isBoostingHabit.habitId!, file)}
                 t={t}
             />
         )}
@@ -1130,7 +1008,7 @@ export default function App() {
         })()}
       <Header 
         currentUser={currentUser} 
-        onLogout={() => dispatch({ type: 'LOGOUT' })}
+        onLogout={handleLogout}
         onLoginClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
         onRegisterClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' })}
         language={language}

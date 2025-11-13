@@ -4,7 +4,8 @@ import { getIconForTopic } from '../utils';
 
 interface CreateHabitViewProps {
     onCancel: () => void;
-    onCreate: (habitData: Omit<Habit, 'id' | 'members' | 'posts' | 'memberLimit' | 'highlightIcon' | 'creatorId'>) => void;
+    // FIX: Update onCreate prop to accept a File object for the cover image
+    onCreate: (habitData: Omit<Habit, 'id' | 'members' | 'posts' | 'memberLimit' | 'highlightIcon' | 'creatorId' | 'coverImage'>, coverImageFile: File | null) => void;
     t: (key: string) => string;
 }
 
@@ -16,6 +17,8 @@ const CreateHabitView: React.FC<CreateHabitViewProps> = ({ onCancel, onCreate, t
     const [subCategoryName, setSubCategoryName] = useState('');
     const [rules, setRules] = useState('');
     const [coverImage, setCoverImage] = useState<string | null>(null);
+    // FIX: Add state for the cover image file
+    const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
 
     const habitCategories = useMemo(() => [
         { 
@@ -82,6 +85,8 @@ const CreateHabitView: React.FC<CreateHabitViewProps> = ({ onCancel, onCreate, t
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            // FIX: Store the file object
+            setCoverImageFile(file);
             const reader = new FileReader();
             reader.onloadend = () => {
                 setCoverImage(reader.result as string);
@@ -101,7 +106,8 @@ const CreateHabitView: React.FC<CreateHabitViewProps> = ({ onCancel, onCreate, t
             return;
         }
 
-        onCreate({ name, topic: selectedSubCategory.topic, description, rules, coverImage: coverImage || undefined, type: habitType });
+        // FIX: Pass the habit data and the file object separately
+        onCreate({ name, topic: selectedSubCategory.topic, description, rules, type: habitType }, coverImageFile);
     };
 
     return (

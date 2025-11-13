@@ -4,17 +4,22 @@ import { Habit } from '../types';
 interface BoostHabitModalProps {
     habit: Habit;
     onClose: () => void;
-    onSubmit: (proofImage: string) => void;
+    // FIX: Update onSubmit to pass a File object instead of a string
+    onSubmit: (proofImageFile: File) => void;
     t: (key: string) => string;
 }
 
 const BoostHabitModal: React.FC<BoostHabitModalProps> = ({ habit, onClose, onSubmit, t }) => {
     const [proofImage, setProofImage] = useState<string | null>(null);
+    // FIX: Add state for the proof image file object
+    const [proofImageFile, setProofImageFile] = useState<File | null>(null);
     const [isSubmitted, setIsSubmitted] = useState(false);
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            // FIX: Store the file object for submission
+            setProofImageFile(file);
             const reader = new FileReader();
             reader.onloadend = () => {
                 setProofImage(reader.result as string);
@@ -24,8 +29,9 @@ const BoostHabitModal: React.FC<BoostHabitModalProps> = ({ habit, onClose, onSub
     };
 
     const handleSubmit = () => {
-        if (proofImage) {
-            onSubmit(proofImage);
+        // FIX: Check for the file object before submitting
+        if (proofImageFile) {
+            onSubmit(proofImageFile);
             setIsSubmitted(true);
             setTimeout(onClose, 3000); // Close modal after 3 seconds
         }

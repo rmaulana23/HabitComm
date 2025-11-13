@@ -4,13 +4,16 @@ import { UserProfile } from '../types';
 interface EditProfileModalProps {
     currentUser: UserProfile;
     onClose: () => void;
-    onSave: (name: string, avatar: string | null) => void;
+    // FIX: Update onSave to accept a File object for the avatar
+    onSave: (name: string, avatarFile: File | null) => void;
     t: (key: string) => string;
 }
 
 const EditProfileModal: React.FC<EditProfileModalProps> = ({ currentUser, onClose, onSave, t }) => {
     const [name, setName] = useState(currentUser.name);
-    const [avatar, setAvatar] = useState<string | null>(null);
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+    // FIX: Add state to hold the avatar File object
+    const [avatarFile, setAvatarFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleAvatarClick = () => {
@@ -20,9 +23,11 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ currentUser, onClos
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
+            // FIX: Store the File object and set the preview
+            setAvatarFile(file);
             const reader = new FileReader();
             reader.onloadend = () => {
-                setAvatar(reader.result as string);
+                setAvatarPreview(reader.result as string);
             };
             reader.readAsDataURL(file);
         }
@@ -31,7 +36,8 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ currentUser, onClos
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (name.trim()) {
-            onSave(name.trim(), avatar);
+            // FIX: Pass the File object to the onSave handler
+            onSave(name.trim(), avatarFile);
         }
     };
 
@@ -44,7 +50,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ currentUser, onClos
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="flex justify-center">
                         <div className="relative group">
-                            <img src={avatar || currentUser.avatar} alt="Avatar" className="w-24 h-24 rounded-full object-cover ring-4 ring-primary-200" />
+                            <img src={avatarPreview || currentUser.avatar} alt="Avatar" className="w-24 h-24 rounded-full object-cover ring-4 ring-primary-200" />
                             <button
                                 type="button"
                                 onClick={handleAvatarClick}

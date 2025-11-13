@@ -33,6 +33,7 @@ export interface Post {
   reactions: Reaction[];
   comments: Comment[];
   timestamp: Date;
+  habitId?: string;
 }
 
 export interface Habit {

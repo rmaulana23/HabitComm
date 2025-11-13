@@ -127,7 +127,8 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onSwitchToRegister, onSw
 };
 
 type RegisterFormProps = {
-    onRegister: (name: string, email: string) => void;
+    // FIX: Add `pass` parameter to onRegister to match the handler in App.tsx
+    onRegister: (name: string, email: string, pass: string) => void;
     onSwitchToLogin: () => void;
     t: (key: string) => string;
 };
@@ -143,7 +144,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onSwitchToLogin
         setLoading(true);
         // Simulate network request
         setTimeout(() => {
-            onRegister(name, email);
+            // FIX: Pass the password to the onRegister handler
+            onRegister(name, email, password);
             setLoading(false);
         }, 500);
     };
@@ -253,7 +255,8 @@ const ForgotPasswordSuccess: React.FC<ForgotPasswordSuccessProps> = ({ onSwitchT
 type AuthModalProps = {
     initialView: 'login' | 'register' | 'forgotPassword' | 'forgotPasswordSuccess';
     onLogin: (email: string, pass: string) => void;
-    onRegister: (name: string, email: string) => void;
+    // FIX: Update onRegister prop to include the password
+    onRegister: (name: string, email: string, pass: string) => void;
     onClose: () => void;
     t: (key: string) => string;
 };
