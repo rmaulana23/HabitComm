@@ -132,6 +132,8 @@ function appReducer(state: AppState, action: Action): AppState {
         case 'LOGIN':
             const userToLogin = action.payload;
             const viewAfterLogin = userToLogin.isAdmin ? 'admin' : 'explore';
+            if (userToLogin.isAdmin) window.location.hash = '/admin';
+            else window.location.hash = '/explore';
             return { 
                 ...state, 
                 currentUser: userToLogin, 
@@ -141,6 +143,7 @@ function appReducer(state: AppState, action: Action): AppState {
                 isAuthModalOpen: false,
             };
         case 'LOGOUT':
+            window.location.hash = '/explore';
             return {
                 ...state,
                 currentUser: null,
@@ -152,6 +155,7 @@ function appReducer(state: AppState, action: Action): AppState {
             };
         case 'REGISTER':
             const newUser = action.payload;
+            window.location.hash = '/explore';
             return {
                 ...state,
                 users: [...state.users, newUser],
@@ -206,13 +210,22 @@ function appReducer(state: AppState, action: Action): AppState {
                     streaks: [...state.loggedInUserProfile.streaks, newStreak],
             };
 
+            const targetView = newHabit.type === 'group' ? 'habit' : 'profile';
+            const targetId = newHabit.type === 'group' ? newHabit.id : state.loggedInUserProfile.id;
+
+            if (newHabit.type === 'group') {
+                window.location.hash = `/#/habit/${newHabit.id}`;
+            } else {
+                window.location.hash = `/#/profile/${state.loggedInUserProfile.id}`;
+            }
+
             return {
                 ...state,
                 habits: [newHabit, ...state.habits],
                 loggedInUserProfile: updatedProfileOnCreate,
                 users: state.users.map(u => u.id === state.loggedInUserProfile!.id ? updatedProfileOnCreate : u),
                 selectedHabitId: newHabit.type === 'group' ? newHabit.id : null,
-                currentView: newHabit.type === 'group' ? 'habit' : 'profile',
+                currentView: targetView,
                 viewingProfileId: newHabit.type === 'private' ? state.loggedInUserProfile.id : null,
             };
         }
@@ -357,6 +370,8 @@ function appReducer(state: AppState, action: Action): AppState {
                 ...state.loggedInUserProfile,
                 streaks: [...state.loggedInUserProfile.streaks, newStreak]
             };
+
+            window.location.hash = `/#/habit/${action.payload}`;
 
             return {
                 ...state,
@@ -683,6 +698,48 @@ export default function App() {
     localStorage.setItem('habitcom-theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    const handleHashChange = () => {
+        const hash = window.location.hash.replace(/^#\/?/, ''); // #/foo -> foo
+        const [path, id] = hash.split('/');
+
+        switch (path) {
+            case 'habit':
+                if (id) dispatch({ type: 'SELECT_HABIT', payload: id });
+                break;
+            case 'profile':
+                if (id) dispatch({ type: 'VIEW_PROFILE', payload: id });
+                break;
+            case 'createHabit':
+                dispatch({ type: 'SELECT_CREATE_HABIT' });
+                break;
+            case 'events':
+                dispatch({ type: 'SELECT_EVENTS' });
+                break;
+            case 'messagingList':
+                dispatch({ type: 'SELECT_MESSAGING_LIST' });
+                break;
+            case 'admin':
+                dispatch({ type: 'SELECT_ADMIN_VIEW' });
+                break;
+            case 'groupHabits':
+                dispatch({ type: 'SELECT_GROUP_HABITS' });
+                break;
+            case 'privateHabits':
+                dispatch({ type: 'SELECT_PRIVATE_HABITS' });
+                break;
+            case 'explore':
+            default:
+                dispatch({ type: 'SELECT_EXPLORE' });
+                break;
+        }
+    };
+
+    handleHashChange(); // Initial route
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+}, []); // Run only once
+
   const selectedHabit = habits.find(h => h.id === selectedHabitId);
 
   const handleLogin = (email: string, pass: string) => {
@@ -833,10 +890,6 @@ export default function App() {
     dispatch({ type: 'OPEN_BOOST_HABIT_MODAL', payload: habitId });
   };
   
-  const handleViewProfile = (userId: string) => {
-    dispatch({ type: 'VIEW_PROFILE', payload: userId });
-  };
-
   const handleSendMessage = (content: string) => {
     if (!isMessaging.recipient) return;
     dispatch({ type: 'SEND_PRIVATE_MESSAGE', payload: { recipientId: isMessaging.recipient.id, content } });
@@ -871,8 +924,6 @@ export default function App() {
                 onAddHabit={() => dispatch({type: 'OPEN_ADD_HABIT_MODAL'})}
                 onDayClick={handleDayClick}
                 onOpenMessage={(user) => dispatch({ type: 'OPEN_MESSAGING', payload: user })}
-                onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })}
-                onViewProfile={handleViewProfile}
                 t={t}
                 language={language}
              />;
@@ -880,7 +931,7 @@ export default function App() {
         case 'createHabit':
             return <CreateHabitView
                 onCreate={handleCreateHabit}
-                onCancel={() => dispatch({ type: 'SELECT_EXPLORE' })}
+                onCancel={() => window.location.hash = '/explore'}
                 t={t}
             />;
         case 'habit':
@@ -908,7 +959,6 @@ export default function App() {
                 handleCommentSubmit={handleCommentSubmit}
                 handleBoostHabit={handleBoostHabit}
                 onOpenManageMembers={(habitId) => dispatch({ type: 'OPEN_MANAGE_MEMBERS_MODAL', payload: habitId })}
-                onViewProfile={handleViewProfile}
                 t={t}
                 boostedHabitId={boostedHabitId}
             />;
@@ -916,14 +966,12 @@ export default function App() {
              return <UserHabitsListView 
                 allUserHabits={allUserHabits}
                 type="group"
-                onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })}
                 t={t}
              />;
         case 'privateHabits':
               return <UserHabitsListView 
                 allUserHabits={allUserHabits}
                 type="private"
-                onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })}
                 t={t}
              />;
         case 'comingSoon':
@@ -983,7 +1031,6 @@ export default function App() {
           habit={viewingHabitDetail} 
           onClose={() => dispatch({ type: 'CLOSE_HABIT_DETAIL'})}
           onJoin={(id) => dispatch({ type: 'JOIN_HABIT', payload: id })}
-          onViewProfile={handleViewProfile}
           isMember={currentUser ? viewingHabitDetail.members.some(m => m.id === currentUser.id) : false}
           t={t}
         />}
@@ -1091,26 +1138,16 @@ export default function App() {
         theme={theme}
         onThemeChange={(theme) => dispatch({ type: 'SET_THEME', payload: theme })}
         onOpenSettings={() => dispatch({type: 'OPEN_SETTINGS'})}
-        onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT'})}
-        onSelectAdminView={() => dispatch({ type: 'SELECT_ADMIN_VIEW' })}
         t={t}
         />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar 
           habits={habits} 
           selectedHabitId={selectedHabitId} 
-          onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })} 
-          onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT'})}
           currentView={currentView}
           currentUser={loggedInUserProfile}
-          onSelectExplore={() => dispatch({ type: 'SELECT_EXPLORE' })}
-          onViewHabitDetail={(habit) => dispatch({ type: 'VIEW_HABIT_DETAIL', payload: habit })}
-          onViewProfile={(id) => dispatch({ type: 'VIEW_PROFILE', payload: id })}
           onOpenSettings={() => dispatch({type: 'OPEN_SETTINGS'})}
           onOpenEditProfile={() => dispatch({ type: 'OPEN_EDIT_PROFILE_MODAL' })}
-          onSelectEvents={() => dispatch({ type: 'SELECT_EVENTS' })}
-          onSelectMessagingList={() => dispatch({ type: 'SELECT_MESSAGING_LIST' })}
-          onSelectAdminView={() => dispatch({ type: 'SELECT_ADMIN_VIEW'})}
           t={t}
           language={language}
         />
@@ -1122,13 +1159,6 @@ export default function App() {
         currentUser={loggedInUserProfile}
         currentView={currentView}
         viewingProfileId={viewingProfileId}
-        onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT'})}
-        onSelectExplore={() => dispatch({ type: 'SELECT_EXPLORE' })}
-        onSelectGroupHabits={() => dispatch({ type: 'SELECT_GROUP_HABITS' })}
-        onSelectPrivateHabits={() => dispatch({ type: 'SELECT_PRIVATE_HABITS' })}
-        onSelectMessagingList={() => dispatch({ type: 'SELECT_MESSAGING_LIST' })}
-        onSelectEvents={() => dispatch({ type: 'SELECT_EVENTS' })}
-        onViewProfile={(id) => dispatch({ type: 'VIEW_PROFILE', payload: id })}
         t={t}
       />
       <footer className="hidden md:block text-center py-3 border-t border-border-color dark:border-neutral-800 bg-white dark:bg-neutral-900">

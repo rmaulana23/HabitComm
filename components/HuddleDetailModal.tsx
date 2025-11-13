@@ -7,17 +7,11 @@ interface HabitDetailModalProps {
     onClose: () => void;
     onJoin: (habitId: string) => void;
     isMember: boolean;
-    onViewProfile: (userId: string) => void;
     t: (key: string) => string;
 }
 
-const HabitDetailModal: React.FC<HabitDetailModalProps> = ({ habit, onClose, onJoin, isMember, onViewProfile, t }) => {
+const HabitDetailModal: React.FC<HabitDetailModalProps> = ({ habit, onClose, onJoin, isMember, t }) => {
     const isFull = habit.members.length >= habit.memberLimit;
-
-    const handleViewProfileClick = (userId: string) => {
-        onClose(); // Close this modal first
-        onViewProfile(userId);
-    };
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
@@ -49,14 +43,14 @@ const HabitDetailModal: React.FC<HabitDetailModalProps> = ({ habit, onClose, onJ
                         <h3 className="font-semibold text-text-primary dark:text-neutral-300 mb-1">{habit.members.length} / {habit.memberLimit} {t('members')}</h3>
                         <div className="flex flex-wrap gap-2">
                             {habit.members.slice(0, 50).map(member => ( // Show max 50 avatars for performance
-                                <button key={member.id} onClick={() => handleViewProfileClick(member.id)}>
+                                <a href={`/#/profile/${member.id}`} key={member.id} onClick={onClose}>
                                     <img
                                         src={member.avatar}
                                         alt={member.name}
                                         title={member.name}
                                         className="w-10 h-10 rounded-full ring-2 ring-white dark:ring-neutral-900 hover:ring-primary-400 transition-all"
                                     />
-                                </button>
+                                </a>
                             ))}
                         </div>
                     </div>

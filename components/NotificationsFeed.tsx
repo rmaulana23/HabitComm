@@ -5,8 +5,6 @@ interface NotificationsFeedProps {
     notifications: Notification[];
     t: (key: string) => string;
     onOpenMessage: (user: User) => void;
-    onSelectHabit: (habitId: string) => void;
-    onViewProfile: (userId: string) => void;
 }
 
 const getNotificationIcon = (type: NotificationType, reactionType?: ReactionType) => {
@@ -26,7 +24,7 @@ const getNotificationIcon = (type: NotificationType, reactionType?: ReactionType
     }
 };
 
-const NotificationsFeed: React.FC<NotificationsFeedProps> = ({ notifications, t, onOpenMessage, onSelectHabit, onViewProfile }) => {
+const NotificationsFeed: React.FC<NotificationsFeedProps> = ({ notifications, t, onOpenMessage }) => {
     
     const getNotificationText = (notification: Notification) => {
         const { type, sender, habit, postContent, reactionType } = notification;
@@ -52,16 +50,15 @@ const NotificationsFeed: React.FC<NotificationsFeedProps> = ({ notifications, t,
                 return 'New notification';
         }
 
-        // Split text to make names and habit names bold
         const parts = text.split(new RegExp(`(${sender.name}|${habit?.name})`, 'g'));
         return (
              <p className="text-text-primary dark:text-neutral-300 leading-tight">
                 {parts.map((part, index) => {
                     if (part === sender.name) {
-                        return <button key={index} onClick={(e) => { e.stopPropagation(); onViewProfile(sender.id);}} className="font-bold hover:underline">{part}</button>;
+                        return <a key={index} href={`/#/profile/${sender.id}`} onClick={(e) => e.stopPropagation()} className="font-bold hover:underline">{part}</a>;
                     }
                     if (habit && part === habit.name) {
-                        return <button key={index} onClick={(e) => { e.stopPropagation(); onSelectHabit(habit.id);}} className="font-bold hover:underline">{part}</button>;
+                        return <a key={index} href={`/#/habit/${habit.id}`} onClick={(e) => e.stopPropagation()} className="font-bold hover:underline">{part}</a>;
                     }
                     return part;
                 })}
@@ -72,8 +69,46 @@ const NotificationsFeed: React.FC<NotificationsFeedProps> = ({ notifications, t,
     const handleNotificationClick = (notification: Notification) => {
         if (notification.type === NotificationType.NEW_MESSAGE) {
             onOpenMessage(notification.sender);
-        } else if (notification.habit) {
-            onSelectHabit(notification.habit.id);
+        }
+    };
+    
+    const renderNotification = (notification: Notification) => {
+        const commonClasses = "w-full flex items-start text-left space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-neutral-800/50 transition-colors";
+        
+        const content = (
+            <>
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center mt-0.5">
+                    {getNotificationIcon(notification.type, notification.reactionType)}
+                </div>
+                <div className="flex-1">
+                    {getNotificationText(notification)}
+                    <p className="text-text-secondary dark:text-neutral-400 text-xs">
+                        {new Date(notification.timestamp).toLocaleString()}
+                    </p>
+                </div>
+            </>
+        );
+
+        if (notification.type === NotificationType.NEW_MESSAGE) {
+            return (
+                <button 
+                    key={notification.id}
+                    onClick={() => handleNotificationClick(notification)}
+                    className={commonClasses}
+                >
+                    {content}
+                </button>
+            );
+        } else {
+            return (
+                <a 
+                    key={notification.id}
+                    href={notification.habit ? `/#/habit/${notification.habit.id}` : '#'}
+                    className={commonClasses}
+                >
+                    {content}
+                </a>
+            );
         }
     };
 
@@ -85,23 +120,7 @@ const NotificationsFeed: React.FC<NotificationsFeedProps> = ({ notifications, t,
             </h3>
             <div className="space-y-3">
                 {notifications.length > 0 ? (
-                    notifications.map(notification => (
-                        <button 
-                            key={notification.id}
-                            onClick={() => handleNotificationClick(notification)}
-                            className="w-full flex items-start text-left space-x-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-neutral-800/50 transition-colors"
-                        >
-                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center mt-0.5">
-                                {getNotificationIcon(notification.type, notification.reactionType)}
-                            </div>
-                            <div className="flex-1">
-                                {getNotificationText(notification)}
-                                <p className="text-text-secondary dark:text-neutral-400 text-xs">
-                                    {new Date(notification.timestamp).toLocaleString()}
-                                </p>
-                            </div>
-                        </button>
-                    ))
+                    notifications.map(notification => renderNotification(notification))
                 ) : (
                     <p className="text-sm text-text-secondary dark:text-neutral-500 text-center py-4">{t('noUpdatesYet')}</p>
                 )}

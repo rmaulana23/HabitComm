@@ -7,10 +7,9 @@ interface PostCardProps {
   currentUser: User;
   onReact: (postId: string, reaction: ReactionType) => void;
   onCommentSubmit: (content: string) => void;
-  onViewProfile: (userId: string) => void;
   t: (key: string) => string;
 }
-const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onReact, onCommentSubmit, onViewProfile, t }) => {
+const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onReact, onCommentSubmit, t }) => {
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [commentContent, setCommentContent] = useState('');
   
@@ -28,14 +27,14 @@ const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onReact, onComme
   return (
     <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl shadow-sm animate-fade-in border border-border-color dark:border-neutral-800">
       <div className="flex items-start space-x-3">
-        <button onClick={() => onViewProfile(post.author.id)} className="shrink-0">
+        <a href={`/#/profile/${post.author.id}`} title={post.author.name} className="shrink-0">
             <img src={post.author.avatar} alt={post.author.name} className="w-11 h-11 rounded-full" />
-        </button>
+        </a>
         <div className="flex-1">
           <div>
-            <button onClick={() => onViewProfile(post.author.id)} className="font-bold text-text-primary dark:text-neutral-200 hover:underline">
+            <a href={`/#/profile/${post.author.id}`} title={post.author.name} className="font-bold text-text-primary dark:text-neutral-200 hover:underline">
                 {post.author.id === currentUser.id ? t('you') : post.author.name}
-            </button>
+            </a>
             <span className="text-xs text-text-secondary dark:text-neutral-400 ml-2">{post.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
           {post.content && <p className="text-text-primary dark:text-neutral-300 mt-1">{parseContent(post.content)}</p>}
@@ -73,11 +72,11 @@ const PostCard: React.FC<PostCardProps> = ({ post, currentUser, onReact, onComme
         <div className="mt-4 pl-14 animate-fade-in space-y-3">
             {post.comments.map(comment => (
                 <div key={comment.id} className="flex items-start space-x-3">
-                    <button onClick={() => onViewProfile(comment.author.id)} className="shrink-0">
+                    <a href={`/#/profile/${comment.author.id}`} title={comment.author.name} className="shrink-0">
                         <img src={comment.author.avatar} alt={comment.author.name} className="w-8 h-8 rounded-full"/>
-                    </button>
+                    </a>
                     <div className="flex-1 bg-gray-100 dark:bg-neutral-800 rounded-lg p-2">
-                        <button onClick={() => onViewProfile(comment.author.id)} className="font-bold text-sm text-text-primary dark:text-neutral-200 hover:underline">{comment.author.name}</button>
+                        <a href={`/#/profile/${comment.author.id}`} title={comment.author.name} className="font-bold text-sm text-text-primary dark:text-neutral-200 hover:underline">{comment.author.name}</a>
                         <p className="text-sm text-text-primary dark:text-neutral-300">{comment.content}</p>
                     </div>
                 </div>

@@ -18,7 +18,6 @@ interface HabitViewProps {
     handleCommentSubmit: (habitId: string, postId: string, content: string) => void;
     handleBoostHabit: (habitId: string) => void;
     onOpenManageMembers: (habitId: string) => void;
-    onViewProfile: (userId: string) => void;
     t: (key: string) => string;
     boostedHabitId: string | null;
 }
@@ -37,7 +36,6 @@ const HabitView: React.FC<HabitViewProps> = ({
     handleCommentSubmit,
     handleBoostHabit,
     onOpenManageMembers,
-    onViewProfile,
     t,
     boostedHabitId
 }) => {
@@ -100,7 +98,6 @@ const HabitView: React.FC<HabitViewProps> = ({
                                     currentUser={currentUser} 
                                     onReact={handleReaction} 
                                     onCommentSubmit={(content) => handleCommentSubmit(selectedHabit.id, post.id, content)}
-                                    onViewProfile={onViewProfile}
                                     t={t} 
                                 />
                             ))

@@ -2,7 +2,7 @@ import React from 'react';
 import { Habit, UserProfile, StreakLog } from '../types';
 import { calculateCurrentStreak } from '../utils';
 
-const Leaderboard: React.FC<{ habit: Habit; allUsers: UserProfile[], t: (key: string) => string; onViewProfile: (userId: string) => void; }> = ({ habit, allUsers, t, onViewProfile }) => {
+const Leaderboard: React.FC<{ habit: Habit; allUsers: UserProfile[], t: (key: string) => string; }> = ({ habit, allUsers, t }) => {
     
     const leaderboardData = habit.members
         .map(member => {
@@ -29,10 +29,10 @@ const Leaderboard: React.FC<{ habit: Habit; allUsers: UserProfile[], t: (key: st
                     {leaderboardData.map((data, index) => (
                         <li key={data.user.id} className="flex items-center">
                             <span className="font-bold text-lg text-text-secondary dark:text-neutral-400 w-6">{index + 1}.</span>
-                            <button onClick={() => onViewProfile(data.user.id)} className="flex items-center flex-1 text-left hover:bg-gray-50 dark:hover:bg-neutral-800/50 p-1 rounded-md">
+                            <a href={`/#/profile/${data.user.id}`} title={data.user.name} className="flex items-center flex-1 text-left hover:bg-gray-50 dark:hover:bg-neutral-800/50 p-1 rounded-md">
                                 <img src={data.user.avatar} alt={data.user.name} className="w-9 h-9 rounded-full mr-3" />
                                 <span className="font-semibold text-text-primary dark:text-neutral-300 truncate">{data.user.name}</span>
-                            </button>
+                            </a>
                             <span className="font-bold text-primary dark:text-primary-400">{data.streak} {t('days')}</span>
                         </li>
                     ))}

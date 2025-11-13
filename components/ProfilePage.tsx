@@ -10,8 +10,6 @@ interface ProfilePageProps {
     onAddHabit: () => void;
     onDayClick: (streakId: string, date: Date) => void;
     onOpenMessage: (user: User) => void;
-    onSelectHabit: (habitId: string) => void;
-    onViewProfile: (userId: string) => void;
     t: (key: string) => string;
     language: Language;
 }
@@ -251,7 +249,7 @@ const BadgesAndAchievements: React.FC<{ userProfile: UserProfile, t: (key: strin
     );
 };
 
-const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserProfile, allHabits, onAddHabit, onDayClick, onOpenMessage, onSelectHabit, onViewProfile, t, language }) => {
+const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserProfile, allHabits, onAddHabit, onDayClick, onOpenMessage, t, language }) => {
     
     const isOwnProfile = profileToView.id === currentUserProfile.id;
 
@@ -331,8 +329,6 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserPro
                             notifications={profileToView.notifications} 
                             t={t}
                             onOpenMessage={onOpenMessage}
-                            onSelectHabit={onSelectHabit}
-                            onViewProfile={onViewProfile}
                          />
                     )}
                     <InteractionStats userProfile={profileToView} t={t} />
