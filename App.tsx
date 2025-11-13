@@ -149,23 +149,38 @@ const parseDates = (data: any, fields: string[]): any => {
 
 function appReducer(state: AppState, action: Action): AppState {
     switch (action.type) {
-        case 'SET_INITIAL_DATA':
+        case 'SET_INITIAL_DATA': {
+            const fetchedPayload = action.payload;
+            const fetchedUsers = fetchedPayload.users;
+            const usersMap = new Map(fetchedUsers.map(u => [u.id, u]));
+
+            if (state.loggedInUserProfile) {
+                usersMap.set(state.loggedInUserProfile.id, state.loggedInUserProfile);
+            }
+
             return {
                 ...state,
-                ...action.payload,
+                ...fetchedPayload,
+                users: Array.from(usersMap.values()),
             };
-        case 'LOGIN':
+        }
+        case 'LOGIN': {
             const userToLogin = action.payload;
             const viewAfterLogin = userToLogin.isAdmin ? 'admin' : 'explore';
             if (userToLogin.isAdmin) window.location.hash = '/admin';
             else window.location.hash = '/explore';
+
+            const otherUsers = state.users.filter(u => u.id !== userToLogin.id);
+
             return { 
                 ...state, 
                 currentUser: userToLogin, 
                 loggedInUserProfile: userToLogin,
+                users: [...otherUsers, userToLogin],
                 currentView: viewAfterLogin,
                 isAuthModalOpen: false,
             };
+        }
         case 'LOGOUT':
             window.location.hash = '/explore';
             return {
@@ -673,8 +688,24 @@ export default function App() {
           coverImage: coverImageUrl,
       }).select().single();
 
-      if (error) console.error(error);
-      // Further actions like adding member and streak are handled by realtime/refetch
+      if (error) {
+          console.error(error);
+          return;
+      }
+      
+      if (newHabit) {
+          // Add creator as a member
+          await supabase.from('habit_members').insert({ habitId: newHabit.id, userId: currentUser.id });
+          // Create a streak for the creator
+          await supabase.from('streaks').insert({
+              habitId: newHabit.id,
+              userId: currentUser.id,
+              name: newHabit.name,
+              topic: newHabit.topic,
+              logs: []
+          });
+          // Realtime subscription will handle the UI update.
+      }
   };
   
   const handleReaction = async (postId: string, reactionType: ReactionType) => {
@@ -709,7 +740,27 @@ export default function App() {
   
   const handleJoinHabit = async (habitId: string) => {
       if (!currentUser) return;
-      await supabase.from('habit_members').insert({ habitId, userId: currentUser.id });
+      
+      const { error: memberError } = await supabase.from('habit_members').insert({ habitId, userId: currentUser.id });
+      if (memberError) {
+          console.error("Error joining habit:", memberError);
+          return;
+      }
+
+      const habitToJoin = habits.find(h => h.id === habitId);
+      if (habitToJoin) {
+          const { error: streakError } = await supabase.from('streaks').insert({
+              habitId: habitId,
+              userId: currentUser.id,
+              name: habitToJoin.name,
+              topic: habitToJoin.topic,
+              logs: []
+          });
+          if (streakError) {
+              console.error("Error creating streak on join:", streakError);
+          }
+      }
+      // Realtime subscription will update the UI
   };
 
   const handleDayClick = (streakId: string, date: Date) => {
