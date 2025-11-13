@@ -1,37 +1,30 @@
 import { GoogleGenAI } from "@google/genai";
 
-// IMPORTANT: This assumes the API key is set in the environment variables.
-// Do not expose the API key in the client-side code.
-const apiKey = process.env.API_KEY;
-if (!apiKey) {
-    console.warn("Google GenAI API key not found. Please set the API_KEY environment variable.");
+// In a real app, this should be handled securely and not exposed on the client-side.
+// For this environment, we assume it's provided.
+let ai: GoogleGenAI;
+try {
+  // Assume process.env.API_KEY is available from the execution environment
+  ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+} catch (error) {
+  console.error("Gemini API key not found or invalid. AI features will be disabled.", error);
 }
-const ai = new GoogleGenAI({ apiKey });
 
-/**
- * Generates a motivational motto using the Gemini API.
- * @param userName The name of the user to generate a motto for.
- * @returns A promise that resolves to the generated motto string.
- */
 export async function generateMotto(userName: string): Promise<string> {
-    if (!apiKey) {
-        return "Keep going, you've got this!"; // Fallback motto
+    if (!ai) {
+        return "AI service is not available.";
     }
 
     try {
-        const prompt = `Create a short, motivational motto (under 12 words) for a user named ${userName} who is building good habits on a social platform called HabitComm. The motto should be inspiring and positive. Respond with only the motto text, without any quotes or extra formatting.`;
-
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
+            model: "gemini-2.5-flash",
+            contents: `Create a short, motivational motto for a user named ${userName} on a habit-building social app. Keep it under 10 words. Be inspiring and concise. Provide only the motto text, without quotes.`,
         });
 
-        const motto = response.text.trim().replace(/"/g, ''); // Clean up response
-        return motto;
-
+        const text = response.text.trim().replace(/"/g, '');
+        return text;
     } catch (error) {
         console.error("Error generating motto with Gemini:", error);
-        // Provide a user-friendly fallback in case of an API error
-        return "Every step forward is a victory.";
+        return "Couldn't generate a motto right now.";
     }
 }

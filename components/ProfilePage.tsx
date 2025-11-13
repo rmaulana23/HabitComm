@@ -10,6 +10,8 @@ interface ProfilePageProps {
     onAddHabit: () => void;
     onDayClick: (streakId: string, date: Date) => void;
     onOpenMessage: (user: User) => void;
+    onSelectHabit: (habitId: string) => void;
+    onViewProfile: (userId: string) => void;
     t: (key: string) => string;
     language: Language;
 }
@@ -249,7 +251,7 @@ const BadgesAndAchievements: React.FC<{ userProfile: UserProfile, t: (key: strin
     );
 };
 
-const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserProfile, allHabits, onAddHabit, onDayClick, onOpenMessage, t, language }) => {
+const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserProfile, allHabits, onAddHabit, onDayClick, onOpenMessage, onSelectHabit, onViewProfile, t, language }) => {
     
     const isOwnProfile = profileToView.id === currentUserProfile.id;
 
@@ -278,8 +280,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserPro
                 {/* Main Content */}
                 <div className="lg:col-span-2 space-y-6 order-2 lg:order-1">
                     <div>
-                        <h2 className="text-2xl font-bold text-text-primary dark:text-neutral-200">{isOwnProfile ? t('myProgress') : profileToView.name}</h2>
-                        <p className="text-md text-text-secondary dark:text-neutral-400 mb-4 italic">"{profileToView.motto}"</p>
+                        <h2 className="text-2xl font-bold text-text-primary dark:text-neutral-200 mb-4">{isOwnProfile ? t('myProgress') : profileToView.name}</h2>
                         <ProgressCard userProfile={profileToView} t={t} />
                         {!isOwnProfile && (
                             <div className="mt-4">
@@ -330,6 +331,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserPro
                             notifications={profileToView.notifications} 
                             t={t}
                             onOpenMessage={onOpenMessage}
+                            onSelectHabit={onSelectHabit}
+                            onViewProfile={onViewProfile}
                          />
                     )}
                     <InteractionStats userProfile={profileToView} t={t} />

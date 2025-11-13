@@ -73,6 +73,7 @@ const ExploreView: React.FC<ExploreViewProps> = ({ allHabits, currentUser, onJoi
                 </div>
             )}
             
+            <h2 className="text-2xl font-bold text-text-primary dark:text-neutral-200 mb-4">{t('exploreNewestHabits')}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {otherHabits.map(habit => (
                     <HabitCard 

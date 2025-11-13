@@ -1,36 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Habit } from '../types';
 
 interface BoostHabitModalProps {
     habit: Habit;
     onClose: () => void;
-    onSubmit: (proofImageFile: File) => void;
+    // FIX: Changed prop type to expect a File object to match the parent component's handler.
+    onSubmit: (proofImage: File) => void;
     t: (key: string) => string;
 }
 
 const BoostHabitModal: React.FC<BoostHabitModalProps> = ({ habit, onClose, onSubmit, t }) => {
+    const [proofImage, setProofImage] = useState<string | null>(null);
     const [proofImageFile, setProofImageFile] = useState<File | null>(null);
-    const [proofImagePreview, setProofImagePreview] = useState<string | null>(null);
     const [isSubmitted, setIsSubmitted] = useState(false);
-    
-    useEffect(() => {
-        // Cleanup function to revoke object URL
-        return () => {
-            if (proofImagePreview) {
-                URL.revokeObjectURL(proofImagePreview);
-            }
-        };
-    }, [proofImagePreview]);
-
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             setProofImageFile(file);
-            if (proofImagePreview) {
-                URL.revokeObjectURL(proofImagePreview);
-            }
-            setProofImagePreview(URL.createObjectURL(file));
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setProofImage(reader.result as string);
+            };
+            reader.readAsDataURL(file);
         }
     };
 
@@ -88,9 +80,9 @@ const BoostHabitModal: React.FC<BoostHabitModalProps> = ({ habit, onClose, onSub
                     />
                 </div>
 
-                {proofImagePreview && (
+                {proofImage && (
                     <div className="mt-4">
-                        <img src={proofImagePreview} alt="Proof preview" className="w-full h-40 object-contain rounded-lg bg-gray-100 dark:bg-neutral-800" />
+                        <img src={proofImage} alt="Proof preview" className="w-full h-40 object-contain rounded-lg bg-gray-100 dark:bg-neutral-800" />
                     </div>
                 )}
 

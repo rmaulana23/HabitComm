@@ -1,9 +1,10 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Habit } from '../types';
 import { getIconForTopic } from '../utils';
 
 interface CreateHabitViewProps {
     onCancel: () => void;
+    // FIX: Updated signature to pass cover image file separately to match parent handler.
     onCreate: (habitData: Omit<Habit, 'id' | 'members' | 'posts' | 'memberLimit' | 'highlightIcon' | 'creatorId' | 'coverImage'>, coverImageFile: File | null) => void;
     t: (key: string) => string;
 }
@@ -15,18 +16,8 @@ const CreateHabitView: React.FC<CreateHabitViewProps> = ({ onCancel, onCreate, t
     const [selectedGroupName, setSelectedGroupName] = useState('');
     const [subCategoryName, setSubCategoryName] = useState('');
     const [rules, setRules] = useState('');
+    const [coverImage, setCoverImage] = useState<string | null>(null);
     const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
-    const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
-    
-    useEffect(() => {
-        // Cleanup function to revoke object URL
-        return () => {
-            if (coverImagePreview) {
-                URL.revokeObjectURL(coverImagePreview);
-            }
-        };
-    }, [coverImagePreview]);
-
 
     const habitCategories = useMemo(() => [
         { 
@@ -94,10 +85,11 @@ const CreateHabitView: React.FC<CreateHabitViewProps> = ({ onCancel, onCreate, t
         const file = e.target.files?.[0];
         if (file) {
             setCoverImageFile(file);
-             if (coverImagePreview) {
-                URL.revokeObjectURL(coverImagePreview);
-            }
-            setCoverImagePreview(URL.createObjectURL(file));
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setCoverImage(reader.result as string);
+            };
+            reader.readAsDataURL(file);
         }
     };
 
@@ -246,10 +238,10 @@ const CreateHabitView: React.FC<CreateHabitViewProps> = ({ onCancel, onCreate, t
                                                 className="w-full text-sm text-gray-500 dark:text-neutral-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary-50 dark:file:bg-primary-500/20 file:text-primary dark:file:text-primary-300 hover:file:bg-primary-100 dark:hover:file:bg-primary-500/30"
                                             />
                                         </div>
-                                        {coverImagePreview && (
+                                        {coverImage && (
                                             <div className="animate-fade-in">
                                                 <label className="block text-sm font-bold text-text-primary dark:text-neutral-300 mb-2">{t('imagePreview')}</label>
-                                                <img src={coverImagePreview} alt="Cover preview" className="w-full h-40 object-cover rounded-lg shadow-sm" />
+                                                <img src={coverImage} alt="Cover preview" className="w-full h-40 object-cover rounded-lg shadow-sm" />
                                             </div>
                                         )}
                                     </>

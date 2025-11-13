@@ -28,12 +28,12 @@ export interface Post {
   id: string;
   author: User;
   content: string;
+  habitId: string;
   imageUrl?: string; // Optional image for progress posts
   streak: number;
   reactions: Reaction[];
   comments: Comment[];
   timestamp: Date;
-  habitId: string;
 }
 
 export interface Habit {

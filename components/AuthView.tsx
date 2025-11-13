@@ -127,6 +127,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin, onSwitchToRegister, onSw
 };
 
 type RegisterFormProps = {
+    // FIX: Added password to the function signature to match the parent component's handler.
     onRegister: (name: string, email: string, pass: string) => void;
     onSwitchToLogin: () => void;
     t: (key: string) => string;

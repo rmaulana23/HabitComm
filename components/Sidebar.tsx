@@ -6,39 +6,57 @@ import { EventIcon, VerifiedIcon } from './Icons';
 interface SidebarProps {
     habits: Habit[];
     selectedHabitId: string | null;
+    onSelectHabit: (id: string) => void;
+    onSelectCreateHabit: () => void;
+    // FIX: Added 'comingSoon', 'groupHabits' and 'privateHabits' to the type to match the AppState and resolve the type error.
     currentView: 'habit' | 'profile' | 'explore' | 'createHabit' | 'events' | 'messagingList' | 'admin' | 'comingSoon' | 'groupHabits' | 'privateHabits';
     currentUser: UserProfile | null;
+    onSelectExplore: () => void;
+    onViewHabitDetail: (habit: Habit) => void;
+    onViewProfile: (userId: string) => void;
     onOpenSettings: () => void;
     onOpenEditProfile: () => void;
+    onSelectEvents: () => void;
+    onSelectMessagingList: () => void;
+    onSelectAdminView: () => void;
     t: (key: string) => string;
     language: Language;
 }
 
-const ProfileHeader: React.FC<{ user: UserProfile, onOpenEditProfile: () => void, t: (key: string) => string, language: Language }> = ({ user, onOpenEditProfile, t, language }) => (
+const ProfileHeader: React.FC<{ user: UserProfile, onViewProfile: (userId: string) => void, onOpenEditProfile: () => void, t: (key: string) => string, language: Language }> = ({ user, onViewProfile, onOpenEditProfile, t, language }) => (
     <div className="text-center p-4 border-b border-border-color dark:border-neutral-800">
-        <a href={`/#/profile/${user.id}`} title={user.name} className="relative group w-20 h-20 mx-auto block">
+        <button onClick={() => onViewProfile(user.id)} className="relative group w-20 h-20 mx-auto">
             <img src={user.avatar} alt={user.name} className="w-20 h-20 rounded-full mx-auto ring-2 ring-primary-200 group-hover:ring-4 transition-all" />
             <div className="absolute -bottom-1 -right-1 bg-white dark:bg-neutral-900 rounded-full p-0.5">
               <VerifiedIcon className="w-5 h-5 text-blue-500" />
             </div>
-        </a>
+        </button>
         <div className="mt-2 flex items-center justify-center space-x-1">
             <h2 className="text-lg font-bold text-text-primary dark:text-neutral-200">{user.name}</h2>
             <button onClick={onOpenEditProfile} className="text-gray-400 hover:text-primary transition-colors">
                 <span>✏️</span>
             </button>
         </div>
-        <p className="text-xs text-text-secondary dark:text-neutral-400 italic px-2 truncate">"{user.motto}"</p>
+        <p className="text-xs text-text-secondary dark:text-neutral-400 mt-1 italic px-2 truncate">"{user.motto}"</p>
+        <p className="text-xs text-text-secondary dark:text-neutral-400">{t('joinedSince')} {user.memberSince.toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { year: 'numeric', month: 'long' })}</p>
     </div>
 );
 
 const Sidebar: React.FC<SidebarProps> = ({ 
     habits, 
     selectedHabitId, 
+    onSelectHabit, 
+    onSelectCreateHabit, 
     currentView, 
     currentUser, 
+    onSelectExplore,
+    onViewHabitDetail,
+    onViewProfile,
     onOpenSettings,
     onOpenEditProfile,
+    onSelectEvents,
+    onSelectMessagingList,
+    onSelectAdminView,
     t,
     language
 }) => {
@@ -48,31 +66,31 @@ const Sidebar: React.FC<SidebarProps> = ({
     
     return (
         <aside className="hidden md:flex w-64 bg-white dark:bg-neutral-900 flex-col shrink-0 border-r border-border-color dark:border-neutral-800">
-            {currentUser && <ProfileHeader user={currentUser} onOpenEditProfile={onOpenEditProfile} t={t} language={language} />}
+            {currentUser && <ProfileHeader user={currentUser} onViewProfile={onViewProfile} onOpenEditProfile={onOpenEditProfile} t={t} language={language} />}
             
             <div className="p-4 space-y-2">
-                <a 
-                    href="/#/createHabit" 
+                <button 
+                    onClick={onSelectCreateHabit} 
                     className="w-full flex items-center justify-center text-white font-semibold py-2.5 px-4 rounded-lg transition-all duration-200 bg-primary hover:bg-primary-600 shadow-sm hover:shadow-md"
                 >
                     <span className="mr-2">➕</span>
                     {t('createHabit')}
-                </a>
+                </button>
 
-                 <a href="/#/explore" title={t('exploreHabits')} className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'explore' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
+                 <a href="#" onClick={(e) => { e.preventDefault(); onSelectExplore(); }} className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'explore' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
                     <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">🧭</span>
                     {t('exploreHabits')}
                 </a>
-                <a href="/#/events" title={t('events')} className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'events' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
+                <a href="#" onClick={(e) => { e.preventDefault(); onSelectEvents(); }} className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'events' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
                     <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">🗓️</span>
                     {t('events')}
                 </a>
-                <a href="/#/messagingList" title={t('messages')} className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'messagingList' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
+                <a href="#" onClick={(e) => { e.preventDefault(); onSelectMessagingList(); }} className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'messagingList' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
                     <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">💬</span>
                     {t('messages')}
                 </a>
                  {currentUser?.isAdmin && (
-                    <a href="/#/admin" title={t('adminPanel')} className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'admin' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
+                    <a href="#" onClick={(e) => { e.preventDefault(); onSelectAdminView(); }} className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'admin' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
                         <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">🛡️</span>
                         {t('adminPanel')}
                     </a>
@@ -87,9 +105,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                             {groupHabits.length > 0 ? (
                                 groupHabits.map(habit => (
                                     <a
-                                        href={`/#/habit/${habit.id}`}
+                                        href="#"
                                         key={habit.id}
-                                        title={habit.name}
+                                        onClick={(e) => { e.preventDefault(); onSelectHabit(habit.id); }}
                                         className={`flex items-center p-2.5 rounded-lg transition-all duration-200 group ${selectedHabitId === habit.id ? 'bg-primary-50 dark:bg-primary-500/10 font-bold text-primary dark:text-primary-300' : 'hover:bg-primary-50 dark:hover:bg-neutral-800 text-text-primary dark:text-neutral-300'}`}
                                     >
                                         <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">{getIconForTopic(habit.topic)}</span>
@@ -105,9 +123,9 @@ const Sidebar: React.FC<SidebarProps> = ({
                             {soloHabits.length > 0 ? (
                                 soloHabits.map(habit => (
                                     <a
-                                        href={`/#/habit/${habit.id}`}
+                                        href="#"
                                         key={habit.id}
-                                        title={habit.name}
+                                        onClick={(e) => { e.preventDefault(); onSelectHabit(habit.id); }}
                                         className={`flex items-center p-2.5 rounded-lg transition-all duration-200 group ${selectedHabitId === habit.id ? 'bg-primary-50 dark:bg-primary-500/10 font-bold text-primary dark:text-primary-300' : 'hover:bg-primary-50 dark:hover:bg-neutral-800 text-text-primary dark:text-neutral-300'}`}
                                     >
                                         <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">{getIconForTopic(habit.topic)}</span>
@@ -124,10 +142,10 @@ const Sidebar: React.FC<SidebarProps> = ({
 
             {currentUser && (
                 <div className="space-y-1 p-4 border-t border-border-color dark:border-neutral-800">
-                    <button onClick={onOpenSettings} className="w-full flex items-center p-2.5 rounded-lg font-medium text-text-primary dark:text-neutral-300 hover:bg-gray-100 dark:hover:bg-neutral-800">
+                    <a href="#" onClick={(e) => { e.preventDefault(); onOpenSettings(); }} className="flex items-center p-2.5 rounded-lg font-medium text-text-primary dark:text-neutral-300 hover:bg-gray-100 dark:hover:bg-neutral-800">
                         <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">⚙️</span>
                         {t('settings')}
-                    </button>
+                    </a>
                 </div>
             )}
         </aside>

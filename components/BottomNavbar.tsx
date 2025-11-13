@@ -6,6 +6,13 @@ interface BottomNavbarProps {
     currentView: string;
     currentUser: UserProfile | null;
     viewingProfileId: string | null;
+    onSelectExplore: () => void;
+    onSelectGroupHabits: () => void;
+    onSelectPrivateHabits: () => void;
+    onSelectMessagingList: () => void;
+    onSelectEvents: () => void;
+    onSelectCreateHabit: () => void;
+    onViewProfile: (userId: string) => void;
     t: (key: string) => string;
 }
 
@@ -13,19 +20,17 @@ const NavItem: React.FC<{
     icon: React.ReactNode;
     label: string;
     isActive: boolean;
-    href: string;
-    title: string;
-}> = ({ icon, label, isActive, href, title }) => (
-    <a
-        href={href}
-        title={title}
+    onClick: () => void;
+}> = ({ icon, label, isActive, onClick }) => (
+    <button
+        onClick={onClick}
         className={`flex flex-col items-center justify-center w-full pt-2 pb-1 transition-colors duration-200 ${
             isActive ? 'text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-primary dark:hover:text-primary-400'
         }`}
     >
         {icon}
         <span className="text-xs font-medium mt-1">{label}</span>
-    </a>
+    </button>
 );
 
 
@@ -33,6 +38,12 @@ const BottomNavbar: React.FC<BottomNavbarProps> = ({
     currentView,
     currentUser,
     viewingProfileId,
+    onSelectExplore,
+    onSelectGroupHabits,
+    onSelectPrivateHabits,
+    onSelectMessagingList,
+    onSelectEvents,
+    onViewProfile,
     t
 }) => {
     if (!currentUser) {
@@ -49,47 +60,41 @@ const BottomNavbar: React.FC<BottomNavbarProps> = ({
                         icon={<ExploreIcon className="w-6 h-6" />}
                         label={t('explore')}
                         isActive={currentView === 'explore'}
-                        href="/#/explore"
-                        title={t('exploreHabits')}
+                        onClick={onSelectExplore}
                     />
                      <NavItem
                         icon={<GroupIcon className="w-6 h-6" />}
                         label={t('grup')}
                         isActive={currentView === 'groupHabits'}
-                        href="/#/groupHabits"
-                        title={t('grupHabitSaya')}
+                        onClick={onSelectGroupHabits}
                     />
                      <NavItem
                         icon={<PrivateIcon className="w-6 h-6" />}
                         label={t('privat')}
                         isActive={currentView === 'privateHabits'}
-                        href="/#/privateHabits"
-                        title={t('privateHabitSaya')}
+                        onClick={onSelectPrivateHabits}
                     />
                      <NavItem
                         icon={<EventIcon className="w-6 h-6" />}
                         label={t('events')}
                         isActive={currentView === 'events'}
-                        href="/#/events"
-                        title={t('events')}
+                        onClick={onSelectEvents}
                     />
                      <NavItem
                         icon={<MessageIcon className="w-6 h-6" />}
                         label={t('messages')}
                         isActive={currentView === 'messagingList'}
-                        href="/#/messagingList"
-                        title={t('messages')}
+                        onClick={onSelectMessagingList}
                     />
-                    <a
-                        href={`/#/profile/${currentUser.id}`}
-                        title={t('you')}
+                    <button
+                        onClick={() => onViewProfile(currentUser.id)}
                         className={`flex flex-col items-center justify-center w-full pt-2 pb-1 transition-colors duration-200 ${
                             viewingOwnProfile ? 'text-primary' : 'text-gray-500 dark:text-gray-400 hover:text-primary dark:hover:text-primary-400'
                         }`}
                     >
                         <img src={currentUser.avatar} alt={t('you')} className={`w-6 h-6 rounded-full ring-2 ${viewingOwnProfile ? 'ring-primary' : 'ring-transparent'}`} />
                         <span className="text-xs font-medium mt-1">{t('you')}</span>
-                    </a>
+                    </button>
                 </div>
             </nav>
         </div>

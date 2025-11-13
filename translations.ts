@@ -50,6 +50,7 @@ export const translations = {
     // Explore View
     exploreHeader: "Waktunya Bangun Kebiasaan Baik Bersama",
     exploreOtherHabits: "Jelajahi Habit Lain!",
+    exploreNewestHabits: "Jelajahi Habit Terbaru!",
     habitOfTheDay: "Habit Hari Ini",
     quickJoin: "Gabung Cepat",
     // Habit Card
@@ -133,6 +134,10 @@ export const translations = {
     // Edit Profile Modal
     editProfile: "Edit Profil",
     yourName: "Nama Anda",
+    yourMotto: "Motto Anda",
+    mottoPlaceholder: "Tulis motto atau buat dengan AI...",
+    generateWithAI: "Buat dengan AI",
+    generating: "Membuat",
     saveChanges: "Simpan Perubahan",
     changeAvatar: "Ganti Avatar",
     // Events
@@ -330,6 +335,7 @@ export const translations = {
     // Explore View
     exploreHeader: "Time to Build Good Habits Together",
     exploreOtherHabits: "Explore Other Habits",
+    exploreNewestHabits: "Explore Newest Habits!",
     habitOfTheDay: "Habit of the Day",
     quickJoin: "Quick Join",
     // Habit Card
@@ -413,6 +419,10 @@ export const translations = {
     // Edit Profile Modal
     editProfile: "Edit Profile",
     yourName: "Your Name",
+    yourMotto: "Your Motto",
+    mottoPlaceholder: "Write your motto or generate with AI...",
+    generateWithAI: "Generate with AI",
+    generating: "Generating",
     saveChanges: "Save Changes",
     changeAvatar: "Change Avatar",
     // Events

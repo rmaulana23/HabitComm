@@ -1,11 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { UserProfile } from '../types';
 import { generateMotto } from '../services/geminiService';
 
 interface EditProfileModalProps {
     currentUser: UserProfile;
     onClose: () => void;
-    onSave: (name: string, motto: string, avatarFile: File | null) => void;
+    onSave: (name: string, avatar: File | null, motto: string) => void;
     t: (key: string) => string;
 }
 
@@ -14,7 +14,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ currentUser, onClos
     const [motto, setMotto] = useState(currentUser.motto);
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-    const [isGeneratingMotto, setIsGeneratingMotto] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleAvatarClick = () => {
@@ -31,26 +31,29 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ currentUser, onClos
             setAvatarPreview(URL.createObjectURL(file));
         }
     };
-    
+
     const handleGenerateMotto = async () => {
-        setIsGeneratingMotto(true);
-        try {
-            const newMotto = await generateMotto(currentUser.name);
-            setMotto(newMotto);
-        } catch (error) {
-            console.error("Error generating motto:", error);
-            alert("Failed to generate motto. Please try again.");
-        } finally {
-            setIsGeneratingMotto(false);
-        }
+        setIsGenerating(true);
+        const newMotto = await generateMotto(name);
+        setMotto(newMotto);
+        setIsGenerating(false);
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (name.trim()) {
-            onSave(name.trim(), motto.trim(), avatarFile);
+            onSave(name.trim(), avatarFile, motto);
         }
     };
+    
+    useEffect(() => {
+        // Cleanup the object URL on component unmount
+        return () => {
+            if (avatarPreview) {
+                URL.revokeObjectURL(avatarPreview);
+            }
+        };
+    }, [avatarPreview]);
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
@@ -90,24 +93,25 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ currentUser, onClos
                             className="w-full bg-gray-50 dark:bg-neutral-800 dark:text-neutral-300 p-3 rounded-lg border border-gray-200 dark:border-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary"
                         />
                     </div>
-                     <div>
-                        <label htmlFor="profile-motto" className="block text-sm font-bold text-text-primary dark:text-neutral-300 mb-2">Motto</label>
-                         <div className="relative">
+                    <div>
+                        <label htmlFor="profile-motto" className="block text-sm font-bold text-text-primary dark:text-neutral-300 mb-2">{t('yourMotto')}</label>
+                        <div className="relative">
                             <input
                                 id="profile-motto"
                                 type="text"
                                 value={motto}
                                 onChange={e => setMotto(e.target.value)}
-                                placeholder="Your motivational motto"
-                                className="w-full bg-gray-50 dark:bg-neutral-800 dark:text-neutral-300 p-3 rounded-lg border border-gray-200 dark:border-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                                placeholder={t('mottoPlaceholder')}
+                                className="w-full bg-gray-50 dark:bg-neutral-800 dark:text-neutral-300 p-3 rounded-lg border border-gray-200 dark:border-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary pr-32"
                             />
-                             <button 
+                            <button
                                 type="button"
                                 onClick={handleGenerateMotto}
-                                disabled={isGeneratingMotto}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold bg-primary-100 dark:bg-primary-500/20 text-primary dark:text-primary-300 px-2 py-1 rounded-md hover:bg-primary-200 dark:hover:bg-primary-500/30 transition disabled:opacity-50"
+                                disabled={isGenerating}
+                                className="absolute right-1 top-1/2 -translate-y-1/2 px-3 py-1.5 text-xs font-bold bg-primary-100 text-primary rounded-md hover:bg-primary-200 dark:bg-primary-500/20 dark:text-primary-300 dark:hover:bg-primary-500/30 disabled:opacity-50 flex items-center"
                             >
-                                {isGeneratingMotto ? '...' : '✨ Generate with AI'}
+                                {isGenerating ? `${t('generating')}...` : `${t('generateWithAI')}`}
+                                <span className="ml-1.5">✨</span>
                             </button>
                         </div>
                     </div>
