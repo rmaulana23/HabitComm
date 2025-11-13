@@ -882,7 +882,7 @@ export default function App() {
 
 
   return (
-    <div className="h-full max-w-[1100px] mx-auto flex flex-col font-sans bg-white dark:bg-neutral-900 md:rounded-xl overflow-hidden md:shadow-2xl md:border border-border-color dark:border-neutral-800 md:my-4">
+    <div className="h-full max-w-[1100px] mx-auto flex flex-col font-sans bg-white dark:bg-neutral-900 md:rounded-xl overflow-hidden md:shadow-2xl md:border border-border-color dark:border-neutral-800">
         {isAuthModalOpen && (
             <AuthModal
                 initialView={authModalView}
