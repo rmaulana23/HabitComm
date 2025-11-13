@@ -583,8 +583,16 @@ export default function App() {
               avatar: `https://i.pravatar.cc/150?u=${authData.user.id}`,
               motto: "New to HabitComm!",
               memberSince: new Date().toISOString(),
+              totalDaysActive: 0,
+              level: 'Beginner',
+              cheersGiven: 0,
+              pushesGiven: 0,
+              checkInPercentage: 0,
           });
-          if (profileError) alert(profileError.message);
+          if (profileError) {
+              console.error("Database error saving new user", profileError);
+              alert('Database error saving new user');
+          }
       }
   };
   
