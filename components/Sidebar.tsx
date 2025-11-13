@@ -28,7 +28,7 @@ const ProfileHeader: React.FC<{ user: UserProfile, onOpenEditProfile: () => void
                 <span>✏️</span>
             </button>
         </div>
-        <p className="text-xs text-text-secondary dark:text-neutral-400">{t('joinedSince')} {user.memberSince.toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { year: 'numeric', month: 'long' })}</p>
+        <p className="text-xs text-text-secondary dark:text-neutral-400 italic px-2 truncate">"{user.motto}"</p>
     </div>
 );
 

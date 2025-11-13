@@ -1,19 +1,20 @@
 import React, { useState, useRef } from 'react';
 import { UserProfile } from '../types';
+import { generateMotto } from '../services/geminiService';
 
 interface EditProfileModalProps {
     currentUser: UserProfile;
     onClose: () => void;
-    // FIX: Update onSave to accept a File object for the avatar
-    onSave: (name: string, avatarFile: File | null) => void;
+    onSave: (name: string, motto: string, avatarFile: File | null) => void;
     t: (key: string) => string;
 }
 
 const EditProfileModal: React.FC<EditProfileModalProps> = ({ currentUser, onClose, onSave, t }) => {
     const [name, setName] = useState(currentUser.name);
-    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-    // FIX: Add state to hold the avatar File object
+    const [motto, setMotto] = useState(currentUser.motto);
     const [avatarFile, setAvatarFile] = useState<File | null>(null);
+    const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+    const [isGeneratingMotto, setIsGeneratingMotto] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleAvatarClick = () => {
@@ -23,21 +24,31 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ currentUser, onClos
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (file) {
-            // FIX: Store the File object and set the preview
             setAvatarFile(file);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setAvatarPreview(reader.result as string);
-            };
-            reader.readAsDataURL(file);
+            if (avatarPreview) {
+                URL.revokeObjectURL(avatarPreview);
+            }
+            setAvatarPreview(URL.createObjectURL(file));
+        }
+    };
+    
+    const handleGenerateMotto = async () => {
+        setIsGeneratingMotto(true);
+        try {
+            const newMotto = await generateMotto(currentUser.name);
+            setMotto(newMotto);
+        } catch (error) {
+            console.error("Error generating motto:", error);
+            alert("Failed to generate motto. Please try again.");
+        } finally {
+            setIsGeneratingMotto(false);
         }
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (name.trim()) {
-            // FIX: Pass the File object to the onSave handler
-            onSave(name.trim(), avatarFile);
+            onSave(name.trim(), motto.trim(), avatarFile);
         }
     };
 
@@ -78,6 +89,27 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ currentUser, onClos
                             required
                             className="w-full bg-gray-50 dark:bg-neutral-800 dark:text-neutral-300 p-3 rounded-lg border border-gray-200 dark:border-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary"
                         />
+                    </div>
+                     <div>
+                        <label htmlFor="profile-motto" className="block text-sm font-bold text-text-primary dark:text-neutral-300 mb-2">Motto</label>
+                         <div className="relative">
+                            <input
+                                id="profile-motto"
+                                type="text"
+                                value={motto}
+                                onChange={e => setMotto(e.target.value)}
+                                placeholder="Your motivational motto"
+                                className="w-full bg-gray-50 dark:bg-neutral-800 dark:text-neutral-300 p-3 rounded-lg border border-gray-200 dark:border-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary"
+                            />
+                             <button 
+                                type="button"
+                                onClick={handleGenerateMotto}
+                                disabled={isGeneratingMotto}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold bg-primary-100 dark:bg-primary-500/20 text-primary dark:text-primary-300 px-2 py-1 rounded-md hover:bg-primary-200 dark:hover:bg-primary-500/30 transition disabled:opacity-50"
+                            >
+                                {isGeneratingMotto ? '...' : '✨ Generate with AI'}
+                            </button>
+                        </div>
                     </div>
                     <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200 dark:border-neutral-800">
                         <button type="button" onClick={onClose} className="px-6 py-2 rounded-lg bg-gray-200 dark:bg-neutral-700 hover:bg-gray-300 dark:hover:bg-neutral-600 transition-colors font-bold text-text-secondary dark:text-neutral-300">

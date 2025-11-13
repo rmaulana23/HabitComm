@@ -457,9 +457,9 @@ export default function App() {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        const { data: profile } = await supabase.from('profiles').select('*, streaks(*)').eq('id', session.user.id).single();
+        const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
         if (profile) {
-            dispatch({ type: 'LOGIN', payload: parseDates(profile, ['memberSince', 'updated_at']) as UserProfile });
+            dispatch({ type: 'LOGIN', payload: parseDates(profile, ['memberSince']) as UserProfile });
         }
       } else {
         dispatch({ type: 'LOGOUT' });
@@ -484,7 +484,7 @@ export default function App() {
         type: 'SET_INITIAL_DATA',
         payload: {
             habits: parseDates(habitsData, ['timestamp']),
-            users: parseDates(usersData, ['memberSince', 'updated_at']),
+            users: parseDates(usersData, ['memberSince']),
             events: parseDates(eventsData, []),
             conversations: [], // Placeholder for now
             boostRequests: parseDates(boostRequestsData, ['timestamp']),
@@ -581,12 +581,10 @@ export default function App() {
               id: authData.user.id,
               name,
               avatar: `https://i.pravatar.cc/150?u=${authData.user.id}`,
-              member_since: new Date().toISOString(),
-              is_admin: false
+              motto: "New to HabitComm!",
+              memberSince: new Date().toISOString(),
           });
-          if (profileError) {
-            alert(`Database error saving new user: ${profileError.message}`);
-          }
+          if (profileError) alert(profileError.message);
       }
   };
   
@@ -655,7 +653,7 @@ export default function App() {
     }
   };
   
-  const handleCreateHabit = async (habitData: Omit<Habit, 'id'|'members'|'posts'|'memberLimit'|'highlightIcon'|'creatorId' | 'coverImage'>, coverImageFile: File | null) => {
+  const handleCreateHabit = async (habitData: Omit<Habit, 'id'|'members'|'posts'|'memberLimit'|'highlightIcon'|'creatorId'>, coverImageFile: File | null) => {
       if (!currentUser) return;
 
       let coverImageUrl: string | undefined = undefined;
@@ -763,7 +761,7 @@ export default function App() {
     });
   };
   
-  const handleUpdateProfile = async (name: string, avatarFile: File | null) => {
+  const handleUpdateProfile = async (name: string, motto: string, avatarFile: File | null) => {
       if(!loggedInUserProfile) return;
       let avatarUrl = loggedInUserProfile.avatar;
 
@@ -773,7 +771,7 @@ export default function App() {
           const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(filePath);
           avatarUrl = publicUrl;
       }
-      const { data, error } = await supabase.from('profiles').update({ name, avatar: avatarUrl }).eq('id', loggedInUserProfile.id).select().single();
+      const { data, error } = await supabase.from('profiles').update({ name, motto, avatar: avatarUrl }).eq('id', loggedInUserProfile.id).select().single();
       if(data) dispatch({ type: 'UPDATE_PROFILE', payload: data as UserProfile });
       if(error) console.error(error);
   }

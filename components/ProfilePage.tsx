@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { UserProfile, Badge, Habit, HabitStreak, StreakLog, User, Language } from '../types';
-import { getIconForTopic, parseContent, calculateCompletionRateLast30Days } from '../utils';
+import { getIconForTopic, parseContent } from '../utils';
 import NotificationsFeed from './NotificationsFeed';
 
 interface ProfilePageProps {
@@ -159,7 +159,7 @@ const StreakCalendar: React.FC<{
 };
 
 
-const ProgressCard: React.FC<{ userProfile: UserProfile, totalDaysActive: number, t: (key: string) => string }> = ({ userProfile, totalDaysActive, t }) => {
+const ProgressCard: React.FC<{ userProfile: UserProfile, t: (key: string) => string }> = ({ userProfile, t }) => {
     const topStreaks = [...userProfile.streaks]
         .sort((a, b) => b.logs.length - a.logs.length)
         .slice(0, 2);
@@ -170,7 +170,7 @@ const ProgressCard: React.FC<{ userProfile: UserProfile, totalDaysActive: number
         <div className="bg-primary p-6 rounded-xl text-white shadow-lg">
             <div className="flex justify-between items-start">
                 <div>
-                    <p className="text-6xl font-bold">{totalDaysActive}</p>
+                    <p className="text-6xl font-bold">{userProfile.totalDaysActive}</p>
                     <p className="font-semibold">{t('totalActiveDays')}</p>
                 </div>
                 <div className="flex space-x-2">
@@ -181,12 +181,14 @@ const ProgressCard: React.FC<{ userProfile: UserProfile, totalDaysActive: number
             </div>
             <div className="flex justify-end items-center mt-6 text-sm font-semibold space-x-4">
                 <span><span className="font-bold">{totalConsistentDays}</span> {t('totalConsistentDays')}</span>
+                <span><span className="font-bold">{userProfile.cheersGiven}</span> {t('cheers')}</span>
+                <span><span className="font-bold">{userProfile.pushesGiven}</span> {t('pushes')}</span>
             </div>
         </div>
     );
 };
 
-const InteractionStats: React.FC<{ checkInPercentage: number, t: (key: string) => string }> = ({ checkInPercentage, t }) => {
+const InteractionStats: React.FC<{ userProfile: UserProfile, t: (key: string) => string }> = ({ userProfile, t }) => {
     const getConsistencyDescription = (percentage: number) => {
         if (percentage < 40) {
             return t('consistencyDescLow');
@@ -200,10 +202,10 @@ const InteractionStats: React.FC<{ checkInPercentage: number, t: (key: string) =
     return (
         <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-md border border-border-color dark:border-neutral-800 p-4 flex flex-col items-center">
             <h3 className="text-lg font-bold text-text-primary dark:text-neutral-200 mb-3">{t('interactionStats')}</h3>
-            <CircularProgress percentage={checkInPercentage} color="text-primary dark:text-primary-400" size={120} />
+            <CircularProgress percentage={userProfile.checkInPercentage} color="text-primary dark:text-primary-400" size={120} />
             <p className="text-sm font-bold text-text-primary dark:text-neutral-300 mt-2 text-center">{t('checkInConsistency')}</p>
             <p className="text-xs text-text-secondary dark:text-neutral-400 mt-1 text-center h-8">
-                {getConsistencyDescription(checkInPercentage)}
+                {getConsistencyDescription(userProfile.checkInPercentage)}
             </p>
         </div>
     );
@@ -270,26 +272,15 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserPro
         return habit.members.some(m => m.id === currentUserProfile.id);
     };
 
-    const totalDaysActive = useMemo(() => 
-        new Set(profileToView.streaks.flatMap(s => s.logs.map(l => new Date(l.date).toDateString()))).size
-    , [profileToView.streaks]);
-
-    const allLogs = useMemo(() => 
-        profileToView.streaks.flatMap(s => s.logs)
-    , [profileToView.streaks]);
-
-    const checkInPercentage = useMemo(() => 
-        calculateCompletionRateLast30Days(allLogs)
-    , [allLogs]);
-
     return (
         <div className="flex-1 p-6 overflow-y-auto animate-fade-in">
             <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6">
                 {/* Main Content */}
                 <div className="lg:col-span-2 space-y-6 order-2 lg:order-1">
                     <div>
-                        <h2 className="text-2xl font-bold text-text-primary dark:text-neutral-200 mb-4">{isOwnProfile ? t('myProgress') : profileToView.name}</h2>
-                        <ProgressCard userProfile={profileToView} totalDaysActive={totalDaysActive} t={t} />
+                        <h2 className="text-2xl font-bold text-text-primary dark:text-neutral-200">{isOwnProfile ? t('myProgress') : profileToView.name}</h2>
+                        <p className="text-md text-text-secondary dark:text-neutral-400 mb-4 italic">"{profileToView.motto}"</p>
+                        <ProgressCard userProfile={profileToView} t={t} />
                         {!isOwnProfile && (
                             <div className="mt-4">
                                 <button onClick={() => onOpenMessage(profileToView)} className="w-full flex items-center justify-center text-white font-semibold py-2.5 px-4 rounded-lg transition-all duration-200 bg-primary/90 hover:bg-primary shadow-sm hover:shadow-md">
@@ -341,7 +332,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserPro
                             onOpenMessage={onOpenMessage}
                          />
                     )}
-                    <InteractionStats checkInPercentage={checkInPercentage} t={t} />
+                    <InteractionStats userProfile={profileToView} t={t} />
                     <BadgesAndAchievements userProfile={profileToView} t={t} />
                 </div>
             </div>

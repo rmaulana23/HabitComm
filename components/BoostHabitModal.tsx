@@ -1,35 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Habit } from '../types';
 
 interface BoostHabitModalProps {
     habit: Habit;
     onClose: () => void;
-    // FIX: Update onSubmit to pass a File object instead of a string
     onSubmit: (proofImageFile: File) => void;
     t: (key: string) => string;
 }
 
 const BoostHabitModal: React.FC<BoostHabitModalProps> = ({ habit, onClose, onSubmit, t }) => {
-    const [proofImage, setProofImage] = useState<string | null>(null);
-    // FIX: Add state for the proof image file object
     const [proofImageFile, setProofImageFile] = useState<File | null>(null);
+    const [proofImagePreview, setProofImagePreview] = useState<string | null>(null);
     const [isSubmitted, setIsSubmitted] = useState(false);
+    
+    useEffect(() => {
+        // Cleanup function to revoke object URL
+        return () => {
+            if (proofImagePreview) {
+                URL.revokeObjectURL(proofImagePreview);
+            }
+        };
+    }, [proofImagePreview]);
+
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            // FIX: Store the file object for submission
             setProofImageFile(file);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setProofImage(reader.result as string);
-            };
-            reader.readAsDataURL(file);
+            if (proofImagePreview) {
+                URL.revokeObjectURL(proofImagePreview);
+            }
+            setProofImagePreview(URL.createObjectURL(file));
         }
     };
 
     const handleSubmit = () => {
-        // FIX: Check for the file object before submitting
         if (proofImageFile) {
             onSubmit(proofImageFile);
             setIsSubmitted(true);
@@ -83,9 +88,9 @@ const BoostHabitModal: React.FC<BoostHabitModalProps> = ({ habit, onClose, onSub
                     />
                 </div>
 
-                {proofImage && (
+                {proofImagePreview && (
                     <div className="mt-4">
-                        <img src={proofImage} alt="Proof preview" className="w-full h-40 object-contain rounded-lg bg-gray-100 dark:bg-neutral-800" />
+                        <img src={proofImagePreview} alt="Proof preview" className="w-full h-40 object-contain rounded-lg bg-gray-100 dark:bg-neutral-800" />
                     </div>
                 )}
 
@@ -98,7 +103,7 @@ const BoostHabitModal: React.FC<BoostHabitModalProps> = ({ habit, onClose, onSub
                     <button 
                         type="button" 
                         onClick={handleSubmit}
-                        disabled={!proofImage}
+                        disabled={!proofImageFile}
                         className="px-8 py-2 rounded-lg bg-primary hover:bg-primary-600 transition-colors text-white font-bold shadow-md hover:shadow-lg disabled:bg-gray-300 dark:disabled:bg-neutral-700 disabled:cursor-not-allowed"
                     >
                         {t('submit')}
