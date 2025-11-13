@@ -79,7 +79,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 )}
             </div>
 
-            <div className="flex-grow p-4 space-y-1 pt-2 border-t dark:border-neutral-800 overflow-y-auto min-h-0">
+            <div className="flex-grow p-4 space-y-1 pt-2 border-t dark:border-neutral-800 overflow-y-auto">
                 {currentUser && (
                     <>
                         <div className="mb-4">
