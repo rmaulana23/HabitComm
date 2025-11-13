@@ -457,9 +457,9 @@ export default function App() {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+        const { data: profile } = await supabase.from('profiles').select('*, streaks(*)').eq('id', session.user.id).single();
         if (profile) {
-            dispatch({ type: 'LOGIN', payload: parseDates(profile, ['memberSince']) as UserProfile });
+            dispatch({ type: 'LOGIN', payload: parseDates(profile, ['memberSince', 'updated_at']) as UserProfile });
         }
       } else {
         dispatch({ type: 'LOGOUT' });
@@ -484,7 +484,7 @@ export default function App() {
         type: 'SET_INITIAL_DATA',
         payload: {
             habits: parseDates(habitsData, ['timestamp']),
-            users: parseDates(usersData, ['memberSince']),
+            users: parseDates(usersData, ['memberSince', 'updated_at']),
             events: parseDates(eventsData, []),
             conversations: [], // Placeholder for now
             boostRequests: parseDates(boostRequestsData, ['timestamp']),
@@ -581,13 +581,8 @@ export default function App() {
               id: authData.user.id,
               name,
               avatar: `https://i.pravatar.cc/150?u=${authData.user.id}`,
-              memberSince: new Date().toISOString(),
-              level: 'Beginner',
-              totalDaysActive: 0,
-              cheersGiven: 0,
-              pushesGiven: 0,
-              checkInPercentage: 0,
-              motto: '',
+              member_since: new Date().toISOString(),
+              is_admin: false
           });
           if (profileError) {
             alert(`Database error saving new user: ${profileError.message}`);
@@ -660,7 +655,7 @@ export default function App() {
     }
   };
   
-  const handleCreateHabit = async (habitData: Omit<Habit, 'id'|'members'|'posts'|'memberLimit'|'highlightIcon'|'creatorId'>, coverImageFile: File | null) => {
+  const handleCreateHabit = async (habitData: Omit<Habit, 'id'|'members'|'posts'|'memberLimit'|'highlightIcon'|'creatorId' | 'coverImage'>, coverImageFile: File | null) => {
       if (!currentUser) return;
 
       let coverImageUrl: string | undefined = undefined;

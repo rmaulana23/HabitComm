@@ -95,16 +95,14 @@ export interface Notification {
 export interface UserProfile extends User {
     email?: string;
     memberSince: Date;
-    totalDaysActive: number;
-    level: string;
-    cheersGiven: number;
-    pushesGiven: number;
-    checkInPercentage: number;
     streaks: HabitStreak[];
     badges: Badge[];
     notifications: Notification[];
-    motto?: string;
     updated_at?: Date;
+    // FIX: Added optional properties to support InteractionStatsModal. These are likely calculated fields.
+    checkInPercentage?: number;
+    cheersGiven?: number;
+    pushesGiven?: number;
 }
 
 export type Language = 'id' | 'en';

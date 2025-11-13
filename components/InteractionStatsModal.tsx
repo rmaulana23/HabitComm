@@ -61,13 +61,16 @@ const InteractionStatsModal: React.FC<InteractionStatsModalProps> = ({ userProfi
                 <h2 className="text-2xl font-bold text-text-primary dark:text-neutral-200 mb-6 text-center">{t('interactionStatsTitle')}</h2>
                 
                 <div className="flex flex-col items-center mb-6">
-                    <CircularProgress percentage={userProfile.checkInPercentage} color="text-primary dark:text-primary-400" size={140} />
+                    {/* FIX: Provide a fallback value of 0 for optional property 'checkInPercentage'. */}
+                    <CircularProgress percentage={userProfile.checkInPercentage || 0} color="text-primary dark:text-primary-400" size={140} />
                     <p className="font-bold text-text-primary dark:text-neutral-300 mt-2">{t('checkInConsistency')}</p>
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <StatItem icon="👏" label={t('totalCheersGiven')} value={userProfile.cheersGiven} />
-                    <StatItem icon="🔥" label={t('totalPushesGiven')} value={userProfile.pushesGiven} />
+                    {/* FIX: Provide a fallback value of 0 for optional property 'cheersGiven'. */}
+                    <StatItem icon="👏" label={t('totalCheersGiven')} value={userProfile.cheersGiven || 0} />
+                    {/* FIX: Provide a fallback value of 0 for optional property 'pushesGiven'. */}
+                    <StatItem icon="🔥" label={t('totalPushesGiven')} value={userProfile.pushesGiven || 0} />
                     <StatItem icon="🗓️" label={t('totalConsistentDays')} value={totalConsistentDays} />
                     <StatItem icon="➕" label={t('totalHabitsJoined')} value={totalHabitsJoined} />
                 </div>
