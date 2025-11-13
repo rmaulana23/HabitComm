@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#d93b3b" />
+    <title>HabitComm</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              'primary': {
+                DEFAULT: '#d93b3b',
+                '50': '#fef6f6',
+                '100': '#fdecec',
+                '200': '#facfcf',
+                '300': '#f7b1b1',
+                '400': '#f28989',
+                '500': '#e95c5c',
+                '600': '#d93b3b',
+                '700': '#b82a2a',
+                '800': '#982626',
+                '900': '#7c2525',
+                '950': '#430f0f',
+              },
+              'secondary': '#f3f4f6', // gray-100
+              'text-primary': '#1f2937', // gray-800
+              'text-secondary': '#6b7280', // gray-500
+              'border-color': '#e5e7eb', // gray-200
+              'card-orange': { bar: '#FDBA74', bg: '#FFF7ED', text: '#9A3412' },
+              'card-mint': { bar: '#86EFAC', bg: '#F0FDF4', text: '#166534' },
+              'card-yellow': { bar: '#FDE047', bg: '#FEFCE8', text: '#854D0E' },
+              'card-teal': { bar: '#5EEAD4', bg: '#F0FDFA', text: '#0F766E' },
+              'grad-pink-start': '#e95c5c',
+              'grad-pink-end': '#A78BFA',
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.3s ease-out forwards',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: 0, transform: 'translateY(10px)' },
+                '100%': { opacity: 1, transform: 'translateY(0)' },
+              },
+            },
+          }
+        }
+      }
+    </script>
+    <style>
+      html, body, #root {
+        height: 100%;
+      }
+       body {
+        font-family: 'Inter', sans-serif;
+      }
+      
+      /* Modern Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background-color: #f3f4f6; /* gray-100 */
+      }
+      ::-webkit-scrollbar-thumb {
+        background-color: #d1d5db; /* gray-300 */
+        border-radius: 10px;
+        border: 2px solid #f3f4f6;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background-color: #9ca3af; /* gray-400 */
+      }
+      .dark ::-webkit-scrollbar-track {
+        background-color: #171717; /* neutral-900 */
+      }
+      .dark ::-webkit-scrollbar-thumb {
+        background-color: #525252; /* neutral-600 */
+        border-color: #171717;
+      }
+      .dark ::-webkit-scrollbar-thumb:hover {
+        background-color: #737373; /* neutral-500 */
+      }
+
+      /* Firefox */
+      html {
+        scrollbar-width: thin;
+        scrollbar-color: #d1d5db #f3f4f6;
+      }
+      html.dark {
+        scrollbar-color: #525252 #171717;
+      }
+
+      @import url('https://rsms.me/inter/inter.css');
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-gray-50 dark:bg-neutral-950 text-text-primary p-4">
+    <div id="root" class="h-full"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
