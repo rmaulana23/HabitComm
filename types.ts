@@ -94,7 +94,6 @@ export interface Notification {
 
 export interface UserProfile extends User {
     email?: string;
-    motto: string;
     memberSince: Date;
     totalDaysActive: number;
     level: string;
