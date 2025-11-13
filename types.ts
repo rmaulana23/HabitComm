@@ -103,6 +103,8 @@ export interface UserProfile extends User {
     streaks: HabitStreak[];
     badges: Badge[];
     notifications: Notification[];
+    motto?: string;
+    updated_at?: Date;
 }
 
 export type Language = 'id' | 'en';

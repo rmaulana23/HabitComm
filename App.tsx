@@ -587,6 +587,7 @@ export default function App() {
               cheersGiven: 0,
               pushesGiven: 0,
               checkInPercentage: 0,
+              motto: '',
           });
           if (profileError) {
             alert(`Database error saving new user: ${profileError.message}`);
