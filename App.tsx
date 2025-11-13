@@ -68,6 +68,7 @@ type Action =
     | { type: 'CLOSE_CREATE_EVENT_MODAL' }
     | { type: 'CREATE_EVENT', payload: Event }
     | { type: 'VIEW_EVENT_DETAIL', payload: Event }
+    // FIX: Add 'CLOSE_EVENT_DETAIL' action type to handle closing the event detail view.
     | { type: 'CLOSE_EVENT_DETAIL' }
     | { type: 'OPEN_BOOST_HABIT_MODAL'; payload: string }
     | { type: 'CLOSE_BOOST_HABIT_MODAL' }
@@ -571,29 +572,22 @@ export default function App() {
   };
 
   const handleRegister = async (name: string, email: string, pass: string) => {
-      const { data: authData, error: authError } = await supabase.auth.signUp({ email, password: pass });
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+          email,
+          password: pass,
+          options: {
+              data: {
+                  name,
+                  avatar_url: `https://i.pravatar.cc/150?u=${email}` // Pass metadata to be used by DB trigger
+              }
+          }
+      });
+
       if (authError) {
           alert(authError.message);
           return;
       }
-      if (authData.user) {
-          const { error: profileError } = await supabase.from('profiles').insert({
-              id: authData.user.id,
-              name,
-              avatar: `https://i.pravatar.cc/150?u=${authData.user.id}`,
-              motto: "New to HabitComm!",
-              memberSince: new Date().toISOString(),
-              totalDaysActive: 0,
-              level: 'Beginner',
-              cheersGiven: 0,
-              pushesGiven: 0,
-              checkInPercentage: 0,
-          });
-          if (profileError) {
-              console.error("Database error saving new user", profileError);
-              alert('Database error saving new user');
-          }
-      }
+      // onAuthStateChange will handle the login and profile fetching after the trigger creates the profile.
   };
   
    const handleLogout = async () => {
