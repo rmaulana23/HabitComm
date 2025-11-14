@@ -1189,6 +1189,7 @@ const App: React.FC = () => {
                                 onOpenMessage={(user) => dispatch({ type: 'OPEN_MESSAGING', payload: user })}
                                 onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })}
                                 onViewProfile={(userId) => dispatch({ type: 'VIEW_PROFILE', payload: userId })}
+                                onOpenEditProfile={() => dispatch({ type: 'OPEN_EDIT_PROFILE_MODAL' })}
                                 t={t}
                                 language={state.language}
                             />
