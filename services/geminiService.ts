@@ -1,21 +1,13 @@
-
 import { GoogleGenAI } from "@google/genai";
 
-// Securely access API Key, handling potential undefined 'process' in some environments
-const API_KEY = typeof process !== 'undefined' && process.env && process.env.API_KEY 
-    ? process.env.API_KEY 
-    : '';
-
-let ai: GoogleGenAI | null = null;
-
-if (API_KEY) {
-    try {
-        ai = new GoogleGenAI({ apiKey: API_KEY });
-    } catch (error) {
-        console.error("Failed to initialize GoogleGenAI:", error);
-    }
-} else {
-    console.warn("Gemini API key not found. AI features will be disabled.");
+// In a real app, this should be handled securely and not exposed on the client-side.
+// For this environment, we assume it's provided.
+let ai: GoogleGenAI;
+try {
+  // Assume process.env.API_KEY is available from the execution environment
+  ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+} catch (error) {
+  console.error("Gemini API key not found or invalid. AI features will be disabled.", error);
 }
 
 export async function generateMotto(userName: string): Promise<string> {

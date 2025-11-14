@@ -8,15 +8,6 @@ export const SpinnerIcon: React.FC<{ className?: string }> = ({ className }) => 
     </svg>
 );
 
-export const FullPageSpinner: React.FC = () => (
-    <div className="fixed inset-0 bg-white dark:bg-neutral-900 z-50 flex items-center justify-center">
-        <div className="flex flex-col items-center">
-            <SpinnerIcon className="w-12 h-12 text-primary mb-4" />
-            <p className="text-text-secondary dark:text-neutral-400 animate-pulse">Loading...</p>
-        </div>
-    </div>
-);
-
 export const EyeIcon: React.FC<{ className?: string }> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
     <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />

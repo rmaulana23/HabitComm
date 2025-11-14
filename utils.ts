@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { StreakLog } from './types';
 
@@ -138,15 +137,4 @@ export const calculateCompletionRateLast30Days = (logs: StreakLog[]): number => 
     );
     
     return Math.round((uniqueLogDays.size / 30) * 100);
-};
-
-export const slugify = (text: string): string => {
-    if (!text) return '';
-    return text
-        .toString()
-        .toLowerCase()
-        .trim()
-        .replace(/\s+/g, '-')
-        .replace(/[^\w\-]+/g, '')
-        .replace(/\-\-+/g, '-');
 };

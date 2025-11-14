@@ -6,26 +6,20 @@ import { AuthInput, AuthButton } from './AuthShared';
 interface ForgotPasswordFormProps {
     onSwitchToSuccess: () => void;
     onSwitchToLogin: () => void;
-    onSubmit: (email: string) => Promise<void>;
     t: (key: string) => string;
 }
 
-export const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onSwitchToSuccess, onSwitchToLogin, onSubmit, t }) => {
+export const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onSwitchToSuccess, onSwitchToLogin, t }) => {
     const [email, setEmail] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
-        try {
-            await onSubmit(email);
+        setTimeout(() => {
             onSwitchToSuccess();
-        } catch (error) {
-            console.error(error);
-            alert("Failed to send reset link. Please try again.");
-        } finally {
             setLoading(false);
-        }
+        }, 500);
     };
 
     return (

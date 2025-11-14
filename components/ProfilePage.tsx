@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useEffect } from 'react';
 import { UserProfile, Badge, Habit, HabitStreak, StreakLog, User, Language } from '../types';
 import { getIconForTopic, parseContent } from '../utils';
@@ -15,7 +17,6 @@ interface ProfilePageProps {
     onOpenMessage: (user: User) => void;
     onSelectHabit: (habitId: string) => void;
     onViewProfile: (userId: string) => void;
-    onOpenEditProfile?: () => void;
     t: (key: string) => string;
     language: Language;
 }
@@ -285,22 +286,7 @@ const DailyTipsCard: React.FC<{ t: (key: string) => string, language: Language }
     );
 };
 
-const MobileProfileHeader: React.FC<{ user: UserProfile, isOwnProfile: boolean, onEdit?: () => void, t: (key: string) => string }> = ({ user, isOwnProfile, onEdit, t }) => (
-    <div className="md:hidden flex flex-col items-center mb-6 animate-fade-in">
-        <div className="relative">
-            <img src={user.avatar} alt={user.name} className="w-24 h-24 rounded-full ring-4 ring-primary-100 dark:ring-primary-900 object-cover" />
-            {isOwnProfile && onEdit && (
-                <button onClick={onEdit} className="absolute bottom-0 right-0 bg-white dark:bg-neutral-800 p-1.5 rounded-full shadow-md border border-gray-200 dark:border-neutral-700 text-sm">
-                    ✏️
-                </button>
-            )}
-        </div>
-        <h1 className="text-2xl font-bold text-text-primary dark:text-neutral-200 mt-3">{user.name}</h1>
-        <p className="text-sm text-text-secondary dark:text-neutral-400 italic">"{user.motto}"</p>
-    </div>
-);
-
-const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserProfile, allHabits, onAddHabit, onDayClick, onOpenMessage, onSelectHabit, onViewProfile, onOpenEditProfile, t, language }) => {
+const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserProfile, allHabits, onAddHabit, onDayClick, onOpenMessage, onSelectHabit, onViewProfile, t, language }) => {
     
     const isOwnProfile = profileToView.id === currentUserProfile.id;
 
@@ -331,13 +317,11 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserPro
 
     return (
         <div className="flex-1 p-6 overflow-y-auto animate-fade-in">
-            <MobileProfileHeader user={profileToView} isOwnProfile={isOwnProfile} onEdit={onOpenEditProfile} t={t} />
-
             <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6">
                 {/* Main Content */}
-                <div className="lg:col-span-2 space-y-6">
+                <div className="lg:col-span-2 space-y-6 order-2 lg:order-1">
                     <div>
-                        <h2 className="text-2xl font-bold text-text-primary dark:text-neutral-200 mb-4 hidden md:block">{isOwnProfile ? t('myProgress') : profileToView.name}</h2>
+                        <h2 className="text-2xl font-bold text-text-primary dark:text-neutral-200 mb-4">{isOwnProfile ? t('myProgress') : profileToView.name}</h2>
                         <ProgressCard userProfile={profileToView} t={t} />
                         {!isOwnProfile && (
                             <div className="mt-4">
@@ -382,7 +366,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserPro
                 </div>
 
                 {/* Right Sidebar */}
-                <div className="space-y-6">
+                <div className="space-y-6 order-1 lg:order-2">
                     {isOwnProfile && (
                         <NotificationsFeed 
                             notifications={profileToView.notifications} 

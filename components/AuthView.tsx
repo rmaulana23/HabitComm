@@ -8,14 +8,13 @@ type AuthModalProps = {
     initialView: 'login' | 'register' | 'forgotPassword' | 'forgotPasswordSuccess';
     onLogin: (email: string, pass: string) => void;
     onRegister: (name: string, email: string, pass: string) => void;
-    onForgotPassword: (email: string) => Promise<void>;
     onClose: () => void;
     t: (key: string) => string;
 };
 
 type View = 'login' | 'register' | 'forgotPassword' | 'forgotPasswordSuccess';
 
-const AuthModal: React.FC<AuthModalProps> = ({ initialView, onLogin, onRegister, onForgotPassword, onClose, t }) => {
+const AuthModal: React.FC<AuthModalProps> = ({ initialView, onLogin, onRegister, onClose, t }) => {
     const [view, setView] = useState<View>(initialView);
 
     const renderContent = () => {
@@ -23,7 +22,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ initialView, onLogin, onRegister,
             case 'register':
                 return <RegisterForm onRegister={onRegister} onSwitchToLogin={() => setView('login')} t={t} />;
             case 'forgotPassword':
-                 return <ForgotPasswordForm onSwitchToSuccess={() => setView('forgotPasswordSuccess')} onSwitchToLogin={() => setView('login')} onSubmit={onForgotPassword} t={t} />;
+                 return <ForgotPasswordForm onSwitchToSuccess={() => setView('forgotPasswordSuccess')} onSwitchToLogin={() => setView('login')} t={t} />;
             case 'forgotPasswordSuccess':
                  return <ForgotPasswordSuccess onSwitchToLogin={() => setView('login')} t={t} />;
             case 'login':

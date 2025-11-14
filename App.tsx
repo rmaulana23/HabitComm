@@ -1,10 +1,14 @@
 
+
+
+
+
+
+
 import React, { useReducer, useState, useEffect } from 'react';
 import { AppState, Habit, User, Post, ReactionType, UserProfile, HabitStreak, StreakLog, Language, Comment, Event, Conversation, PrivateMessage, Notification, NotificationType, BoostRequest, UserPreferences } from './types';
 import { getInitialData } from './data';
 import { translations } from './translations';
-import { supabase } from './supabaseClient';
-import { FullPageSpinner } from './components/AuthShared';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import HabitView from './components/HuddleView';
@@ -34,7 +38,6 @@ import ManageMembersModal from './components/ManageMembersModal';
 import LandingPage from './components/LandingPage';
 import JoinRequestModal from './components/JoinRequestModal';
 import JoinRequestsAdminModal from './components/JoinRequestsAdminModal';
-import { slugify } from './utils';
 
 
 // --- MOCK DATA ---
@@ -109,8 +112,7 @@ type Action =
     | { type: 'CLOSE_MANAGE_MEMBERS_MODAL' }
     | { type: 'KICK_MEMBER'; payload: { habitId: string; userId: string } }
     | { type: 'MARK_NOTIFICATIONS_READ' }
-    | { type: 'UPDATE_PREFERENCES'; payload: Partial<UserPreferences> }
-    | { type: 'SET_VIEW'; view: AppState['currentView'] };
+    | { type: 'UPDATE_PREFERENCES'; payload: Partial<UserPreferences> };
 
 const savedTheme = localStorage.getItem('habitcom-theme') || 'light';
 
@@ -152,11 +154,8 @@ function appReducer(state: AppState, action: Action): AppState {
     switch (action.type) {
         case 'LOGIN':
             const userToLogin = action.payload;
-            // View logic handled by Effect now, but we update state
-            const usersList = state.users.find(u => u.id === userToLogin.id) 
-                ? state.users.map(u => u.id === userToLogin.id ? userToLogin : u) 
-                : [...state.users, userToLogin];
-            return { ...state, currentUser: userToLogin, loggedInUserProfile: userToLogin, users: usersList, isAuthModalOpen: false, isLandingPage: false };
+            const viewAfterLogin = state.isLandingPage ? 'explore' : state.currentView;
+            return { ...state, currentUser: userToLogin, loggedInUserProfile: userToLogin, isAuthModalOpen: false, isLandingPage: false, currentView: viewAfterLogin };
         case 'LOGOUT':
             return { ...initialState, isLandingPage: true, habits: state.habits, users: state.users, events: state.events, conversations: state.conversations };
         case 'REGISTER':
@@ -703,8 +702,6 @@ function appReducer(state: AppState, action: Action): AppState {
                  return u;
              });
              return { ...state, users: updatedUsersWithPrefs, currentUser: updatedUserWithPrefs };
-        case 'SET_VIEW':
-            return { ...state, currentView: action.view, selectedHabitId: null, viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
         default:
             return state;
     }
@@ -715,206 +712,6 @@ const App: React.FC = () => {
     const [state, dispatch] = useReducer(appReducer, initialState);
     const [postContent, setPostContent] = useState('');
     const [postImage, setPostImage] = useState<string | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-
-    // --- URL ROUTING LOGIC ---
-
-    // 1. Sync Hash -> State (Listener)
-    useEffect(() => {
-        const handleHashChange = () => {
-            const hash = window.location.hash.replace('#', '');
-            
-            if (!state.currentUser && !['/login', '/register'].includes(hash) && hash !== '') {
-                // If not logged in, we might want to allow exploring or redirect to landing
-                // For now, let's assume basic routes work, but detailed ones depend on auth state
-            }
-
-            if (hash === '' || hash === '/') {
-                // Landing page or explore depending on auth
-                if (state.currentUser) dispatch({ type: 'SELECT_EXPLORE' });
-            } else if (hash === '/explore') {
-                dispatch({ type: 'SELECT_EXPLORE' });
-            } else if (hash === '/events') {
-                dispatch({ type: 'SELECT_EVENTS' });
-            } else if (hash === '/messages') {
-                dispatch({ type: 'SELECT_MESSAGING_LIST' });
-            } else if (hash === '/admin') {
-                dispatch({ type: 'SELECT_ADMIN_VIEW' });
-            } else if (hash === '/habits/group') {
-                dispatch({ type: 'SELECT_GROUP_HABITS' });
-            } else if (hash === '/habits/private') {
-                dispatch({ type: 'SELECT_PRIVATE_HABITS' });
-            } else if (hash === '/create-habit') {
-                dispatch({ type: 'SELECT_CREATE_HABIT' });
-            } else if (hash.startsWith('/habit/')) {
-                // Format: /habit/slug-id  (Extract ID from end)
-                const parts = hash.split('-');
-                const habitId = parts.length > 1 ? parts.pop() : null; // Get last part
-                // If strict format isn't followed, fallback to assuming the whole slug is ID or finding by slug
-                // But standardizing on slug-ID is safer for this implementation.
-                // Let's try to find by ID directly first (if URL was just #/habit/habit_1)
-                
-                const rawIdFromUrl = hash.replace('/habit/', '');
-                // Check if it looks like "slug-id" or just "id"
-                // Our IDs are "habit_..."
-                let targetId = rawIdFromUrl;
-                if (rawIdFromUrl.includes('-habit_')) {
-                     targetId = 'habit_' + rawIdFromUrl.split('-habit_')[1];
-                }
-
-                if (targetId) {
-                    dispatch({ type: 'SELECT_HABIT', payload: targetId });
-                }
-            } else if (hash.startsWith('/profile/')) {
-                const userId = hash.replace('/profile/', '');
-                dispatch({ type: 'VIEW_PROFILE', payload: userId });
-            } else if (hash === '/login') {
-                dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' });
-            } else if (hash === '/register') {
-                dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' });
-            }
-        };
-
-        window.addEventListener('hashchange', handleHashChange);
-        // Run on mount to handle initial URL
-        handleHashChange();
-
-        return () => window.removeEventListener('hashchange', handleHashChange);
-    }, [state.currentUser]); // Re-run if auth changes to potentially redirect
-
-    // 2. Sync State -> Hash (Broadcaster)
-    useEffect(() => {
-        if (state.isLandingPage && !state.currentUser) {
-            // Do not overwrite hash if on landing page unless specific modal is open
-            if (state.isAuthModalOpen && state.authModalView === 'login') {
-                 if (window.location.hash !== '#/login') window.location.hash = '/login';
-            } else if (state.isAuthModalOpen && state.authModalView === 'register') {
-                 if (window.location.hash !== '#/register') window.location.hash = '/register';
-            } else {
-                 // Clear hash on landing page base
-                 if (window.location.hash !== '' && window.location.hash !== '#/') {
-                     history.replaceState(null, '', ' ');
-                 }
-            }
-            return;
-        }
-
-        let newHash = '';
-        if (state.currentView === 'explore') newHash = '/explore';
-        else if (state.currentView === 'events') newHash = '/events';
-        else if (state.currentView === 'messagingList') newHash = '/messages';
-        else if (state.currentView === 'admin') newHash = '/admin';
-        else if (state.currentView === 'groupHabits') newHash = '/habits/group';
-        else if (state.currentView === 'privateHabits') newHash = '/habits/private';
-        else if (state.currentView === 'createHabit') newHash = '/create-habit';
-        else if (state.currentView === 'habit' && state.selectedHabitId) {
-            const habit = state.habits.find(h => h.id === state.selectedHabitId);
-            if (habit) {
-                newHash = `/habit/${slugify(habit.name)}-${habit.id}`;
-            }
-        }
-        else if (state.currentView === 'profile' && state.viewingProfileId) {
-            newHash = `/profile/${state.viewingProfileId}`;
-        }
-
-        if (newHash && window.location.hash.replace('#', '') !== newHash) {
-            window.location.hash = newHash;
-        }
-    }, [state.currentView, state.selectedHabitId, state.viewingProfileId, state.isLandingPage, state.isAuthModalOpen, state.authModalView]);
-
-
-    // --- Supabase Auth & Sync ---
-    
-    // Fetch user profile from Supabase and map to app state
-    const fetchAndSetUser = async (user: any) => {
-        try {
-            const { data: profile, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', user.id)
-                .single();
-            
-            let userProfileData = profile;
-
-            if (error || !profile) {
-                // Fallback: Create temporary profile object from auth metadata if DB record is missing/slow
-                userProfileData = {
-                    id: user.id,
-                    email: user.email,
-                    name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-                    avatar: user.user_metadata?.avatar || 'https://i.pravatar.cc/150',
-                    motto: "Ready to start!",
-                    member_since: new Date().toISOString(),
-                    total_days_active: 0,
-                    level: "Newbie",
-                    cheers_given: 0,
-                    pushes_given: 0,
-                    check_in_percentage: 0,
-                    preferences: { showStats: true, showBadges: true, showDailyTips: false, showTools: true },
-                    is_admin: false
-                };
-            }
-
-            const userProfile: UserProfile = {
-                id: userProfileData.id,
-                name: userProfileData.name,
-                avatar: userProfileData.avatar,
-                email: userProfileData.email,
-                motto: userProfileData.motto,
-                memberSince: new Date(userProfileData.member_since),
-                totalDaysActive: userProfileData.total_days_active,
-                level: userProfileData.level,
-                cheersGiven: userProfileData.cheers_given,
-                pushesGiven: userProfileData.pushes_given,
-                checkInPercentage: userProfileData.check_in_percentage,
-                preferences: userProfileData.preferences,
-                streaks: [], // TODO: Fetch streaks from DB
-                badges: [],
-                notifications: [],
-                isAdmin: userProfileData.is_admin
-            };
-            
-            dispatch({ type: 'LOGIN', payload: userProfile });
-        } catch (err) {
-            console.error("Unexpected error in fetchAndSetUser:", err);
-        }
-    };
-
-    useEffect(() => {
-        let mounted = true;
-
-        const initAuth = async () => {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session?.user) {
-                    await fetchAndSetUser(session.user);
-                } else {
-                    // No session, stop loading (landing page will show)
-                }
-            } catch (err) {
-                console.error("Auth init error:", err);
-            } finally {
-                if (mounted) setIsLoading(false);
-            }
-        };
-
-        initAuth();
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'SIGNED_OUT') {
-                dispatch({ type: 'LOGOUT' });
-                if (mounted) setIsLoading(false);
-            } else if (session?.user && event !== 'INITIAL_SESSION') {
-                // Handle sign in or token refresh
-                await fetchAndSetUser(session.user);
-            }
-        });
-
-        return () => {
-            mounted = false;
-            subscription.unsubscribe();
-        };
-    }, []);
 
     // --- Handlers ---
 
@@ -932,56 +729,37 @@ const App: React.FC = () => {
     }, [state.theme]);
 
 
-    const handleLogin = async (email: string, pass: string) => {
-        const { error } = await supabase.auth.signInWithPassword({
-            email,
-            password: pass,
-        });
-        if (error) {
-            alert(error.message);
+    const handleLogin = (email: string, pass: string) => {
+        const user = state.users.find(u => u.email === email);
+        if (user) {
+            dispatch({ type: 'LOGIN', payload: user });
+        } else {
+            alert(t('invalidCredentials'));
         }
-        // setIsLoading(false) handled by onAuthStateChange or should be reset if error
     };
     
-    const handleRegister = async (name: string, email: string, pass: string) => {
-        const { error } = await supabase.auth.signUp({
+    const handleRegister = (name: string, email: string, pass: string) => {
+        const newUser: UserProfile = {
+            id: `user_${Date.now()}`,
+            name,
             email,
-            password: pass,
-            options: {
-                data: {
-                    name: name,
-                    avatar: `https://i.pravatar.cc/150?u=${Date.now()}`
-                }
-            }
-        });
-        
-        if (error) {
-            alert(error.message);
-        } else {
-            alert("Registration successful! Please check your email for verification.");
-            dispatch({ type: 'CLOSE_AUTH_MODAL' });
-        }
+            avatar: `https://i.pravatar.cc/150?u=${Date.now()}`,
+            motto: "Ready to start!",
+            memberSince: new Date(),
+            totalDaysActive: 0,
+            level: "Newbie",
+            cheersGiven: 0,
+            pushesGiven: 0,
+            checkInPercentage: 0,
+            streaks: [],
+            badges: [],
+            notifications: [],
+            preferences: { showStats: true, showBadges: true, showDailyTips: false, showTools: false }
+        };
+        dispatch({ type: 'REGISTER', payload: newUser });
     };
 
-    const handleLogout = async () => {
-        setIsLoading(true);
-        try {
-            await supabase.auth.signOut();
-        } catch (error) {
-            console.error("Logout failed:", error);
-        } finally {
-            // Force state update to ensure UI doesn't freeze
-            dispatch({ type: 'LOGOUT' });
-            setIsLoading(false);
-        }
-    };
-    
-    const handleForgotPassword = async (email: string) => {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.href,
-        });
-        if (error) throw error;
-    };
+    const handleLogout = () => dispatch({ type: 'LOGOUT' });
 
     const handlePostSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -1108,16 +886,12 @@ const App: React.FC = () => {
         }
     };
 
-    if (isLoading) {
-        return <FullPageSpinner />;
-    }
-
     if (state.isLandingPage && !state.currentUser) {
         return (
             <>
                 <LandingPage 
-                    onLoginClick={() => window.location.hash = '/login'}
-                    onRegisterClick={() => window.location.hash = '/register'}
+                    onLoginClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
+                    onRegisterClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' })}
                     language={state.language}
                     onLanguageChange={(lang) => dispatch({ type: 'SET_LANGUAGE', payload: lang })}
                     t={t}
@@ -1127,11 +901,7 @@ const App: React.FC = () => {
                         initialView={state.authModalView}
                         onLogin={handleLogin}
                         onRegister={handleRegister}
-                        onForgotPassword={handleForgotPassword}
-                        onClose={() => {
-                            dispatch({ type: 'CLOSE_AUTH_MODAL' });
-                            window.history.replaceState(null, '', ' '); // Clear hash
-                        }}
+                        onClose={() => dispatch({ type: 'CLOSE_AUTH_MODAL' })}
                         t={t}
                     />
                 )}
@@ -1163,8 +933,8 @@ const App: React.FC = () => {
                 <Header 
                     currentUser={state.currentUser} 
                     onLogout={handleLogout} 
-                    onLoginClick={() => window.location.hash = '/login'}
-                    onRegisterClick={() => window.location.hash = '/register'}
+                    onLoginClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
+                    onRegisterClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' })}
                     language={state.language}
                     onLanguageChange={(lang) => dispatch({ type: 'SET_LANGUAGE', payload: lang })}
                     theme={state.theme}
@@ -1258,7 +1028,6 @@ const App: React.FC = () => {
                                 onOpenMessage={(user) => dispatch({ type: 'OPEN_MESSAGING', payload: user })}
                                 onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })}
                                 onViewProfile={(userId) => dispatch({ type: 'VIEW_PROFILE', payload: userId })}
-                                onOpenEditProfile={() => dispatch({ type: 'OPEN_EDIT_PROFILE_MODAL' })}
                                 t={t}
                                 language={state.language}
                             />
@@ -1418,11 +1187,7 @@ const App: React.FC = () => {
                         initialView={state.authModalView}
                         onLogin={handleLogin}
                         onRegister={handleRegister}
-                        onForgotPassword={handleForgotPassword}
-                        onClose={() => {
-                            dispatch({ type: 'CLOSE_AUTH_MODAL' });
-                            window.history.replaceState(null, '', ' ');
-                        }}
+                        onClose={() => dispatch({ type: 'CLOSE_AUTH_MODAL' })}
                         t={t}
                     />
                 )}

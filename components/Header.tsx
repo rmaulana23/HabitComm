@@ -72,10 +72,10 @@ const UserMenu: React.FC<{ user: UserProfile, onLogout: () => void, onMarkRead: 
 const Header: React.FC<HeaderProps> = ({ currentUser, onLogout, onLoginClick, onRegisterClick, language, onLanguageChange, theme, onThemeChange, onOpenSettings, onSelectCreateHabit, onSelectAdminView, onMarkRead, t }) => (
     <header className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm sticky top-0 z-10 p-3 border-b border-border-color dark:border-neutral-800">
         <div className="flex items-center justify-between">
-            <a href="#/" className="flex items-center">
+            <div className="flex items-center">
                 <AppLogo className="h-8 w-8 mr-2 hidden md:block" />
                 <h1 className="text-xl font-bold text-text-primary dark:text-neutral-200">HabitComm</h1>
-            </a>
+            </div>
             
             <div className="flex-1 hidden md:flex justify-center px-4">
                  {currentUser && (
@@ -95,13 +95,13 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onLogout, onLoginClick, on
                     <>
                         {/* Mobile buttons */}
                         <div className="md:hidden flex items-center space-x-2">
-                            <a href="#/create-habit" className="px-3 py-1.5 rounded-lg font-semibold bg-primary text-sm text-white hover:bg-primary-600 transition-colors flex items-center">
+                            <button onClick={onSelectCreateHabit} className="px-3 py-1.5 rounded-lg font-semibold bg-primary text-sm text-white hover:bg-primary-600 transition-colors">
                                 {t('createHabit')}
-                            </a>
+                            </button>
                             {currentUser.isAdmin && (
-                                <a href="#/admin" className="text-text-secondary dark:text-neutral-400 hover:text-primary dark:hover:text-primary-400 p-1">
+                                <button onClick={onSelectAdminView} className="text-text-secondary dark:text-neutral-400 hover:text-primary dark:hover:text-primary-400 p-1">
                                     <AdminIcon className="w-6 h-6" />
-                                </a>
+                                </button>
                             )}
                             <button onClick={onOpenSettings} className="text-text-secondary dark:text-neutral-400 hover:text-primary dark:hover:text-primary-400 p-1">
                                 <SettingsIcon className="w-6 h-6" />
@@ -111,9 +111,9 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onLogout, onLoginClick, on
                         {/* Desktop user menu & icons */}
                         <div className="hidden md:flex items-center space-x-4">
                              {currentUser.isAdmin && (
-                                <a href="#/admin" className="text-text-secondary dark:text-neutral-400 hover:text-primary dark:hover:text-primary-400 p-1" title={t('adminPanel')}>
+                                <button onClick={onSelectAdminView} className="text-text-secondary dark:text-neutral-400 hover:text-primary dark:hover:text-primary-400 p-1" title={t('adminPanel')}>
                                     <AdminIcon className="w-6 h-6" />
-                                </a>
+                                </button>
                             )}
                              <button onClick={onOpenSettings} className="text-text-secondary dark:text-neutral-400 hover:text-primary dark:hover:text-primary-400 p-1" title={t('settings')}>
                                 <SettingsIcon className="w-6 h-6" />
@@ -129,12 +129,12 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onLogout, onLoginClick, on
                         >
                              {language === 'id' ? 'EN' : 'ID'}
                         </button>
-                        <a href="#/register" className="hidden md:block px-4 py-2 rounded-lg font-semibold border border-gray-300 dark:border-neutral-700 text-sm text-text-primary dark:text-neutral-200 hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors">
+                        <button onClick={onRegisterClick} className="hidden md:block px-4 py-2 rounded-lg font-semibold border border-gray-300 dark:border-neutral-700 text-sm text-text-primary dark:text-neutral-200 hover:bg-gray-100 dark:hover:bg-neutral-800 transition-colors">
                             {t('signUpFree')}
-                        </a>
-                        <a href="#/login" className="px-4 py-2 rounded-lg font-semibold bg-primary text-sm text-white hover:bg-primary-600 transition-colors">
+                        </button>
+                        <button onClick={onLoginClick} className="px-4 py-2 rounded-lg font-semibold bg-primary text-sm text-white hover:bg-primary-600 transition-colors">
                             {t('logIn')}
-                        </a>
+                        </button>
                     </div>
                  )}
             </div>
