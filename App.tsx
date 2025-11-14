@@ -28,6 +28,7 @@ import AboutModal from './components/AboutModal';
 import BottomNavbar from './components/BottomNavbar';
 import UserHabitsListView from './components/UserHabitsListView';
 import ManageMembersModal from './components/ManageMembersModal';
+import LandingPage from './components/LandingPage';
 
 
 // --- MOCK DATA ---
@@ -41,6 +42,7 @@ type Action =
     | { type: 'REGISTER'; payload: UserProfile }
     | { type: 'OPEN_AUTH_MODAL'; payload: 'login' | 'register' }
     | { type: 'CLOSE_AUTH_MODAL' }
+    | { type: 'ENTER_APP' }
     | { type: 'SELECT_HABIT'; payload: string }
     | { type: 'SELECT_EXPLORE' }
     | { type: 'VIEW_PROFILE'; payload: string }
@@ -125,6 +127,7 @@ const initialState: AppState = {
     authModalView: 'login',
     boostRequests: [],
     isManageMembersModalOpen: { isOpen: false, habitId: null },
+    isLandingPage: true,
 };
 
 function appReducer(state: AppState, action: Action): AppState {
@@ -139,6 +142,7 @@ function appReducer(state: AppState, action: Action): AppState {
                 currentView: viewAfterLogin,
                 viewingProfileId: userToLogin.id,
                 isAuthModalOpen: false,
+                isLandingPage: false,
             };
         case 'LOGOUT':
             return {
@@ -149,6 +153,7 @@ function appReducer(state: AppState, action: Action): AppState {
                 selectedHabitId: null,
                 viewingProfileId: null,
                 isSettingsOpen: false,
+                isLandingPage: true,
             };
         case 'REGISTER':
             const newUser = action.payload;
@@ -160,6 +165,7 @@ function appReducer(state: AppState, action: Action): AppState {
                 currentView: 'explore',
                 viewingProfileId: newUser.id,
                 isAuthModalOpen: false,
+                isLandingPage: false,
             };
         case 'OPEN_AUTH_MODAL':
             return {
@@ -171,6 +177,11 @@ function appReducer(state: AppState, action: Action): AppState {
             return {
                 ...state,
                 isAuthModalOpen: false,
+            };
+        case 'ENTER_APP':
+            return {
+                ...state,
+                isLandingPage: false,
             };
         case 'SELECT_HABIT':
             if (!state.currentUser) {
@@ -679,7 +690,7 @@ export default function App() {
   const [postImage, setPostImage] = useState<File | null>(null);
   const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
 
-  const { habits, currentUser, loggedInUserProfile, users, conversations, selectedHabitId, currentView, viewingProfileId, viewingHabitDetail, isAddingHabit, streakDayModal, isSettingsOpen, language, isEditingProfile, events, isCreatingEvent, viewingEventDetail, boostedHabitId, isBoostingHabit, theme, isPrivacyPolicyOpen, isTermsConditionsOpen, isAboutModalOpen, isMessaging, isAuthModalOpen, authModalView, boostRequests, isManageMembersModalOpen } = state;
+  const { habits, currentUser, loggedInUserProfile, users, conversations, selectedHabitId, currentView, viewingProfileId, viewingHabitDetail, isAddingHabit, streakDayModal, isSettingsOpen, language, isEditingProfile, events, isCreatingEvent, viewingEventDetail, boostedHabitId, isBoostingHabit, theme, isPrivacyPolicyOpen, isTermsConditionsOpen, isAboutModalOpen, isMessaging, isAuthModalOpen, authModalView, boostRequests, isManageMembersModalOpen, isLandingPage } = state;
   const t = (key: keyof typeof translations.id) => translations[language][key] || key;
 
   useEffect(() => {
@@ -963,183 +974,209 @@ export default function App() {
     }
   };
 
+  // Landing Page View Logic
+  // If no user is logged in, ALWAYS show Landing Page (and Auth Modal if open)
+  if (!currentUser) {
+    return (
+        <>
+            {isAuthModalOpen && (
+                <AuthModal
+                    initialView={authModalView}
+                    onLogin={handleLogin}
+                    onRegister={handleRegister}
+                    onClose={() => dispatch({ type: 'CLOSE_AUTH_MODAL' })}
+                    t={t}
+                />
+            )}
+            <LandingPage 
+                onLoginClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
+                onRegisterClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' })}
+                language={language}
+                onLanguageChange={(lang) => dispatch({type: 'SET_LANGUAGE', payload: lang})}
+                t={t}
+            />
+        </>
+    );
+  }
 
   return (
-    <div className="h-full max-w-[1100px] mx-auto flex flex-col font-sans bg-white dark:bg-neutral-900 rounded-xl overflow-hidden shadow-2xl border border-border-color dark:border-neutral-800">
-        {isAuthModalOpen && (
-            <AuthModal
-                initialView={authModalView}
-                onLogin={handleLogin}
-                onRegister={handleRegister}
-                onClose={() => dispatch({ type: 'CLOSE_AUTH_MODAL' })}
-                t={t}
-            />
-        )}
-        {isManageMembersModalOpen.isOpen && state.habits.find(h => h.id === isManageMembersModalOpen.habitId) && currentUser && (
-            <ManageMembersModal
-                habit={state.habits.find(h => h.id === isManageMembersModalOpen.habitId)!}
+    <div className="h-full md:p-4 w-full flex justify-center">
+        <div className="h-full w-full max-w-[1100px] flex flex-col font-sans bg-white dark:bg-neutral-900 rounded-xl overflow-hidden shadow-2xl border border-border-color dark:border-neutral-800">
+            {isAuthModalOpen && (
+                <AuthModal
+                    initialView={authModalView}
+                    onLogin={handleLogin}
+                    onRegister={handleRegister}
+                    onClose={() => dispatch({ type: 'CLOSE_AUTH_MODAL' })}
+                    t={t}
+                />
+            )}
+            {isManageMembersModalOpen.isOpen && state.habits.find(h => h.id === isManageMembersModalOpen.habitId) && currentUser && (
+                <ManageMembersModal
+                    habit={state.habits.find(h => h.id === isManageMembersModalOpen.habitId)!}
+                    currentUser={currentUser}
+                    onClose={() => dispatch({ type: 'CLOSE_MANAGE_MEMBERS_MODAL' })}
+                    onKickMember={(userId) => dispatch({ type: 'KICK_MEMBER', payload: { habitId: isManageMembersModalOpen.habitId!, userId } })}
+                    t={t}
+                />
+            )}
+        {viewingHabitDetail && 
+            <HabitDetailModal 
+            habit={viewingHabitDetail} 
+            onClose={() => dispatch({ type: 'CLOSE_HABIT_DETAIL'})}
+            onJoin={(id) => dispatch({ type: 'JOIN_HABIT', payload: id })}
+            onViewProfile={handleViewProfile}
+            isMember={currentUser ? viewingHabitDetail.members.some(m => m.id === currentUser.id) : false}
+            t={t}
+            />}
+            {isAddingHabit && (
+                <AddHabitModal 
+                    onClose={() => dispatch({type: 'CLOSE_ADD_HABIT_MODAL'})}
+                    onSave={(data) => dispatch({type: 'ADD_HABIT_STREAK', payload: data })}
+                    t={t}
+                />
+            )}
+            {streakDayModal.isOpen && streakDayModal.date && streakDayModal.streakId && (
+                <StreakDayModal
+                    date={streakDayModal.date}
+                    log={streakDayModal.log}
+                    onClose={() => dispatch({type: 'CLOSE_STREAK_DAY_MODAL'})}
+                    onSave={(note) => dispatch({type: 'ADD_STREAK_LOG', payload: { streakId: streakDayModal.streakId!, log: { date: streakDayModal.date!, note }} })}
+                    t={t}
+                    language={language}
+                />
+            )}
+            {isSettingsOpen && (
+                <SettingsModal
+                    onClose={() => dispatch({type: 'CLOSE_SETTINGS'})}
+                    onLogout={() => dispatch({ type: 'LOGOUT' })}
+                    currentLanguage={language}
+                    onLanguageChange={(lang) => dispatch({type: 'SET_LANGUAGE', payload: lang})}
+                    currentTheme={theme}
+                    onThemeChange={(theme) => dispatch({ type: 'SET_THEME', payload: theme })}
+                    onOpenPrivacyPolicy={() => dispatch({ type: 'OPEN_PRIVACY_POLICY' })}
+                    onOpenTermsConditions={() => dispatch({ type: 'OPEN_TERMS_CONDITIONS' })}
+                    onOpenAbout={() => dispatch({ type: 'OPEN_ABOUT_MODAL' })}
+                    t={t}
+                />
+            )}
+            {isEditingProfile && loggedInUserProfile && (
+                <EditProfileModal
+                    currentUser={loggedInUserProfile}
+                    onClose={() => dispatch({ type: 'CLOSE_EDIT_PROFILE_MODAL' })}
+                    onSave={handleUpdateProfile}
+                    t={t}
+                />
+            )}
+            {isCreatingEvent && (
+                <CreateEventModal
+                    onClose={() => dispatch({ type: 'CLOSE_CREATE_EVENT_MODAL' })}
+                    onSave={handleCreateEvent}
+                    t={t}
+                />
+            )}
+            {viewingEventDetail && (
+                <EventDetailModal
+                    event={viewingEventDetail}
+                    onClose={() => dispatch({ type: 'CLOSE_EVENT_DETAIL' })}
+                    t={t}
+                    language={language}
+                />
+            )}
+            {isBoostingHabit.isOpen && state.habits.find(h => h.id === isBoostingHabit.habitId) && (
+                <BoostHabitModal
+                    habit={state.habits.find(h => h.id === isBoostingHabit.habitId)!}
+                    onClose={() => dispatch({ type: 'CLOSE_BOOST_HABIT_MODAL' })}
+                    onSubmit={handleBoostSubmit}
+                    t={t}
+                />
+            )}
+            {isPrivacyPolicyOpen && (
+                <PrivacyPolicyModal
+                    onClose={() => dispatch({ type: 'CLOSE_PRIVACY_POLICY' })}
+                    t={t}
+                />
+            )}
+            {isTermsConditionsOpen && (
+                <TermsConditionsModal
+                    onClose={() => dispatch({ type: 'CLOSE_TERMS_CONDITIONS' })}
+                    t={t}
+                />
+            )}
+            {isAboutModalOpen && (
+                <AboutModal
+                    onClose={() => dispatch({ type: 'CLOSE_ABOUT_MODAL' })}
+                    t={t}
+                />
+            )}
+            {isMessaging.isOpen && isMessaging.recipient && currentUser && (() => {
+            const conversationId = [currentUser.id, isMessaging.recipient!.id].sort().join('-');
+            const conversation = conversations.find(c => c.id === conversationId);
+            return (
+                <MessagingModal
+                recipient={isMessaging.recipient!}
                 currentUser={currentUser}
-                onClose={() => dispatch({ type: 'CLOSE_MANAGE_MEMBERS_MODAL' })}
-                onKickMember={(userId) => dispatch({ type: 'KICK_MEMBER', payload: { habitId: isManageMembersModalOpen.habitId!, userId } })}
+                conversation={conversation}
+                onClose={() => dispatch({ type: 'CLOSE_MESSAGING' })}
+                onSendMessage={handleSendMessage}
                 t={t}
+                />
+            );
+            })()}
+        <Header 
+            currentUser={currentUser} 
+            onLogout={() => dispatch({ type: 'LOGOUT' })}
+            onLoginClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
+            onRegisterClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' })}
+            language={language}
+            onLanguageChange={(lang) => dispatch({type: 'SET_LANGUAGE', payload: lang})}
+            theme={theme}
+            onThemeChange={(theme) => dispatch({ type: 'SET_THEME', payload: theme })}
+            onOpenSettings={() => dispatch({type: 'OPEN_SETTINGS'})}
+            onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT'})}
+            onSelectAdminView={() => dispatch({ type: 'SELECT_ADMIN_VIEW' })}
+            t={t}
             />
-        )}
-      {viewingHabitDetail && 
-        <HabitDetailModal 
-          habit={viewingHabitDetail} 
-          onClose={() => dispatch({ type: 'CLOSE_HABIT_DETAIL'})}
-          onJoin={(id) => dispatch({ type: 'JOIN_HABIT', payload: id })}
-          onViewProfile={handleViewProfile}
-          isMember={currentUser ? viewingHabitDetail.members.some(m => m.id === currentUser.id) : false}
-          t={t}
-        />}
-        {isAddingHabit && (
-            <AddHabitModal 
-                onClose={() => dispatch({type: 'CLOSE_ADD_HABIT_MODAL'})}
-                onSave={(data) => dispatch({type: 'ADD_HABIT_STREAK', payload: data })}
-                t={t}
+        <div className="flex flex-1 overflow-hidden">
+            <Sidebar 
+            habits={habits} 
+            selectedHabitId={selectedHabitId} 
+            onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })} 
+            onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT'})}
+            currentView={currentView}
+            currentUser={loggedInUserProfile}
+            onSelectExplore={() => dispatch({ type: 'SELECT_EXPLORE' })}
+            onViewHabitDetail={(habit) => dispatch({ type: 'VIEW_HABIT_DETAIL', payload: habit })}
+            onViewProfile={(id) => dispatch({ type: 'VIEW_PROFILE', payload: id })}
+            onOpenSettings={() => dispatch({type: 'OPEN_SETTINGS'})}
+            onOpenEditProfile={() => dispatch({ type: 'OPEN_EDIT_PROFILE_MODAL' })}
+            onSelectEvents={() => dispatch({ type: 'SELECT_EVENTS' })}
+            onSelectMessagingList={() => dispatch({ type: 'SELECT_MESSAGING_LIST' })}
+            onSelectAdminView={() => dispatch({ type: 'SELECT_ADMIN_VIEW'})}
+            t={t}
+            language={language}
             />
-        )}
-        {streakDayModal.isOpen && streakDayModal.date && streakDayModal.streakId && (
-            <StreakDayModal
-                date={streakDayModal.date}
-                log={streakDayModal.log}
-                onClose={() => dispatch({type: 'CLOSE_STREAK_DAY_MODAL'})}
-                onSave={(note) => dispatch({type: 'ADD_STREAK_LOG', payload: { streakId: streakDayModal.streakId!, log: { date: streakDayModal.date!, note }} })}
-                t={t}
-                language={language}
-            />
-        )}
-        {isSettingsOpen && (
-            <SettingsModal
-                onClose={() => dispatch({type: 'CLOSE_SETTINGS'})}
-                onLogout={() => dispatch({ type: 'LOGOUT' })}
-                currentLanguage={language}
-                onLanguageChange={(lang) => dispatch({type: 'SET_LANGUAGE', payload: lang})}
-                currentTheme={theme}
-                onThemeChange={(theme) => dispatch({ type: 'SET_THEME', payload: theme })}
-                onOpenPrivacyPolicy={() => dispatch({ type: 'OPEN_PRIVACY_POLICY' })}
-                onOpenTermsConditions={() => dispatch({ type: 'OPEN_TERMS_CONDITIONS' })}
-                onOpenAbout={() => dispatch({ type: 'OPEN_ABOUT_MODAL' })}
-                t={t}
-            />
-        )}
-        {isEditingProfile && loggedInUserProfile && (
-            <EditProfileModal
-                currentUser={loggedInUserProfile}
-                onClose={() => dispatch({ type: 'CLOSE_EDIT_PROFILE_MODAL' })}
-                onSave={handleUpdateProfile}
-                t={t}
-            />
-        )}
-        {isCreatingEvent && (
-            <CreateEventModal
-                onClose={() => dispatch({ type: 'CLOSE_CREATE_EVENT_MODAL' })}
-                onSave={handleCreateEvent}
-                t={t}
-            />
-        )}
-        {viewingEventDetail && (
-            <EventDetailModal
-                event={viewingEventDetail}
-                onClose={() => dispatch({ type: 'CLOSE_EVENT_DETAIL' })}
-                t={t}
-                language={language}
-            />
-        )}
-        {isBoostingHabit.isOpen && state.habits.find(h => h.id === isBoostingHabit.habitId) && (
-            <BoostHabitModal
-                habit={state.habits.find(h => h.id === isBoostingHabit.habitId)!}
-                onClose={() => dispatch({ type: 'CLOSE_BOOST_HABIT_MODAL' })}
-                onSubmit={handleBoostSubmit}
-                t={t}
-            />
-        )}
-        {isPrivacyPolicyOpen && (
-            <PrivacyPolicyModal
-                onClose={() => dispatch({ type: 'CLOSE_PRIVACY_POLICY' })}
-                t={t}
-            />
-        )}
-        {isTermsConditionsOpen && (
-            <TermsConditionsModal
-                onClose={() => dispatch({ type: 'CLOSE_TERMS_CONDITIONS' })}
-                t={t}
-            />
-        )}
-        {isAboutModalOpen && (
-            <AboutModal
-                onClose={() => dispatch({ type: 'CLOSE_ABOUT_MODAL' })}
-                t={t}
-            />
-        )}
-        {isMessaging.isOpen && isMessaging.recipient && currentUser && (() => {
-          const conversationId = [currentUser.id, isMessaging.recipient!.id].sort().join('-');
-          const conversation = conversations.find(c => c.id === conversationId);
-          return (
-            <MessagingModal
-              recipient={isMessaging.recipient!}
-              currentUser={currentUser}
-              conversation={conversation}
-              onClose={() => dispatch({ type: 'CLOSE_MESSAGING' })}
-              onSendMessage={handleSendMessage}
-              t={t}
-            />
-          );
-        })()}
-      <Header 
-        currentUser={currentUser} 
-        onLogout={() => dispatch({ type: 'LOGOUT' })}
-        onLoginClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
-        onRegisterClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' })}
-        language={language}
-        onLanguageChange={(lang) => dispatch({type: 'SET_LANGUAGE', payload: lang})}
-        theme={theme}
-        onThemeChange={(theme) => dispatch({ type: 'SET_THEME', payload: theme })}
-        onOpenSettings={() => dispatch({type: 'OPEN_SETTINGS'})}
-        onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT'})}
-        onSelectAdminView={() => dispatch({ type: 'SELECT_ADMIN_VIEW' })}
-        t={t}
+            <main className="flex-1 bg-secondary dark:bg-neutral-950 flex flex-col pb-16 md:pb-0">
+                {renderMainView()}
+            </main>
+        </div>
+        <BottomNavbar
+            currentUser={loggedInUserProfile}
+            currentView={currentView}
+            viewingProfileId={viewingProfileId}
+            onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT'})}
+            onSelectExplore={() => dispatch({ type: 'SELECT_EXPLORE' })}
+            onSelectGroupHabits={() => dispatch({ type: 'SELECT_GROUP_HABITS' })}
+            onSelectPrivateHabits={() => dispatch({ type: 'SELECT_PRIVATE_HABITS' })}
+            onSelectMessagingList={() => dispatch({ type: 'SELECT_MESSAGING_LIST' })}
+            onSelectEvents={() => dispatch({ type: 'SELECT_EVENTS' })}
+            onViewProfile={(id) => dispatch({ type: 'VIEW_PROFILE', payload: id })}
+            t={t}
         />
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar 
-          habits={habits} 
-          selectedHabitId={selectedHabitId} 
-          onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })} 
-          onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT'})}
-          currentView={currentView}
-          currentUser={loggedInUserProfile}
-          onSelectExplore={() => dispatch({ type: 'SELECT_EXPLORE' })}
-          onViewHabitDetail={(habit) => dispatch({ type: 'VIEW_HABIT_DETAIL', payload: habit })}
-          onViewProfile={(id) => dispatch({ type: 'VIEW_PROFILE', payload: id })}
-          onOpenSettings={() => dispatch({type: 'OPEN_SETTINGS'})}
-          onOpenEditProfile={() => dispatch({ type: 'OPEN_EDIT_PROFILE_MODAL' })}
-          onSelectEvents={() => dispatch({ type: 'SELECT_EVENTS' })}
-          onSelectMessagingList={() => dispatch({ type: 'SELECT_MESSAGING_LIST' })}
-          onSelectAdminView={() => dispatch({ type: 'SELECT_ADMIN_VIEW'})}
-          t={t}
-          language={language}
-        />
-        <main className="flex-1 bg-secondary dark:bg-neutral-950 flex flex-col pb-16 md:pb-0">
-            {renderMainView()}
-        </main>
-      </div>
-       <BottomNavbar
-        currentUser={loggedInUserProfile}
-        currentView={currentView}
-        viewingProfileId={viewingProfileId}
-        onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT'})}
-        onSelectExplore={() => dispatch({ type: 'SELECT_EXPLORE' })}
-        onSelectGroupHabits={() => dispatch({ type: 'SELECT_GROUP_HABITS' })}
-        onSelectPrivateHabits={() => dispatch({ type: 'SELECT_PRIVATE_HABITS' })}
-        onSelectMessagingList={() => dispatch({ type: 'SELECT_MESSAGING_LIST' })}
-        onSelectEvents={() => dispatch({ type: 'SELECT_EVENTS' })}
-        onViewProfile={(id) => dispatch({ type: 'VIEW_PROFILE', payload: id })}
-        t={t}
-      />
-      <footer className="hidden md:block text-center py-3 border-t border-border-color dark:border-neutral-800 bg-white dark:bg-neutral-900">
-        <p className="text-xs text-text-secondary dark:text-neutral-500">{t('copyright')}</p>
-      </footer>
+        <footer className="hidden md:block text-center py-3 border-t border-border-color dark:border-neutral-800 bg-white dark:bg-neutral-900">
+            <p className="text-xs text-text-secondary dark:text-neutral-500">{t('copyright')}</p>
+        </footer>
+        </div>
     </div>
   );
 }

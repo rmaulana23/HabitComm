@@ -4,8 +4,8 @@ import { Habit } from '../types';
 interface BoostHabitModalProps {
     habit: Habit;
     onClose: () => void;
-    // FIX: Changed prop type to expect a File object to match the parent component's handler.
-    onSubmit: (proofImage: File) => void;
+    // FIX: Changed prop type to expect a string (base64) to match the parent component's handler.
+    onSubmit: (proofImage: string) => void;
     t: (key: string) => string;
 }
 
@@ -27,8 +27,8 @@ const BoostHabitModal: React.FC<BoostHabitModalProps> = ({ habit, onClose, onSub
     };
 
     const handleSubmit = () => {
-        if (proofImageFile) {
-            onSubmit(proofImageFile);
+        if (proofImage) {
+            onSubmit(proofImage);
             setIsSubmitted(true);
             setTimeout(onClose, 3000); // Close modal after 3 seconds
         }

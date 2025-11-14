@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Logo, SettingsIcon, AdminIcon } from './Icons';
+import { AppLogo, SettingsIcon, AdminIcon } from './Icons';
 import { UserProfile, Language } from '../types';
 
 interface HeaderProps {
@@ -58,7 +58,7 @@ const Header: React.FC<HeaderProps> = ({ currentUser, onLogout, onLoginClick, on
     <header className="bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm sticky top-0 z-10 p-3 border-b border-border-color dark:border-neutral-800">
         <div className="flex items-center justify-between">
             <div className="flex items-center">
-                <Logo className="h-8 w-8 mr-2 hidden md:block" />
+                <AppLogo className="h-8 w-8 mr-2 hidden md:block" />
                 <h1 className="text-xl font-bold text-text-primary dark:text-neutral-200">HabitComm</h1>
             </div>
             

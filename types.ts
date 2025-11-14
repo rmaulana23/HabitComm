@@ -174,6 +174,7 @@ export type AppState = {
         isOpen: boolean;
         habitId: string | null;
     };
+    isLandingPage: boolean;
 };
 
 export interface Event {

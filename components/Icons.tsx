@@ -6,7 +6,11 @@ interface IconProps {
 }
 
 export const Logo: React.FC<IconProps> = ({ className }) => (
-  <img src="https://i.imgur.com/K64DR6C.jpg" alt="HabitComm Logo" className={className} />
+  <img src="https://imgur.com/E1Pwi9v.jpg" alt="HabitComm Logo" className={className} />
+);
+
+export const AppLogo: React.FC<IconProps> = ({ className }) => (
+  <img src="https://imgur.com/dywhqjO.jpg" alt="HabitComm Logo" className={className} />
 );
 
 export const UserIcon: React.FC<IconProps> = ({ className }) => (
