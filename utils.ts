@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { StreakLog } from './types';
 
@@ -140,6 +141,7 @@ export const calculateCompletionRateLast30Days = (logs: StreakLog[]): number => 
 };
 
 export const slugify = (text: string): string => {
+    if (!text) return '';
     return text
         .toString()
         .toLowerCase()

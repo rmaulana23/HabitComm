@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { UserProfile } from '../types';
 import { ExploreIcon, PlusIcon, GroupIcon, PrivateIcon, MessageIcon, EventIcon } from './Icons';
@@ -22,17 +21,17 @@ const NavItem: React.FC<{
     icon: React.ReactNode;
     label: string;
     isActive: boolean;
-    onClick: () => void;
-}> = ({ icon, label, isActive, onClick }) => (
-    <button
-        onClick={onClick}
+    href: string;
+}> = ({ icon, label, isActive, href }) => (
+    <a
+        href={href}
         className={`flex flex-col items-center justify-center w-full pt-2 pb-1 transition-colors duration-200 ${
             isActive ? 'text-white font-bold' : 'text-white/70 hover:text-white'
         }`}
     >
         {icon}
         <span className="text-xs mt-1">{label}</span>
-    </button>
+    </a>
 );
 
 
@@ -62,41 +61,41 @@ const BottomNavbar: React.FC<BottomNavbarProps> = ({
                         icon={<ExploreIcon className="w-6 h-6" />}
                         label={t('explore')}
                         isActive={currentView === 'explore'}
-                        onClick={onSelectExplore}
+                        href="#/explore"
                     />
                      <NavItem
                         icon={<GroupIcon className="w-6 h-6" />}
                         label={t('grup')}
                         isActive={currentView === 'groupHabits'}
-                        onClick={onSelectGroupHabits}
+                        href="#/habits/group"
                     />
                      <NavItem
                         icon={<PrivateIcon className="w-6 h-6" />}
                         label={t('privat')}
                         isActive={currentView === 'privateHabits'}
-                        onClick={onSelectPrivateHabits}
+                        href="#/habits/private"
                     />
                      <NavItem
                         icon={<EventIcon className="w-6 h-6" />}
                         label={t('events')}
                         isActive={currentView === 'events'}
-                        onClick={onSelectEvents}
+                        href="#/events"
                     />
                      <NavItem
                         icon={<MessageIcon className="w-6 h-6" />}
                         label={t('messages')}
                         isActive={currentView === 'messagingList'}
-                        onClick={onSelectMessagingList}
+                        href="#/messages"
                     />
-                    <button
-                        onClick={() => onViewProfile(currentUser.id)}
+                    <a
+                        href={`#/profile/${currentUser.id}`}
                         className={`flex flex-col items-center justify-center w-full pt-2 pb-1 transition-colors duration-200 ${
                             viewingOwnProfile ? 'text-white font-bold' : 'text-white/70 hover:text-white'
                         }`}
                     >
                         <img src={currentUser.avatar} alt={t('you')} className={`w-6 h-6 rounded-full ring-2 ${viewingOwnProfile ? 'ring-white' : 'ring-transparent'}`} />
                         <span className="text-xs mt-1">{t('you')}</span>
-                    </button>
+                    </a>
                 </div>
             </nav>
         </div>

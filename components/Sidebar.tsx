@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Habit, UserProfile, Language } from '../types';
-import { getIconForTopic } from '../utils';
+import { getIconForTopic, slugify } from '../utils';
 import { EventIcon, VerifiedIcon } from './Icons';
 
 interface SidebarProps {
@@ -77,28 +77,28 @@ const Sidebar: React.FC<SidebarProps> = ({
             {currentUser && <ProfileHeader user={currentUser} onViewProfile={onViewProfile} onOpenEditProfile={onOpenEditProfile} onMarkRead={onMarkRead} t={t} language={language} />}
             
             <div className="p-4 space-y-2">
-                <button 
-                    onClick={onSelectCreateHabit} 
+                <a 
+                    href="#/create-habit"
                     className="w-full flex items-center justify-center text-white font-semibold py-2.5 px-4 rounded-lg transition-all duration-200 bg-primary hover:bg-primary-600 shadow-sm hover:shadow-md"
                 >
                     <span className="mr-2">➕</span>
                     {t('createHabit')}
-                </button>
+                </a>
 
-                 <a href="#" onClick={(e) => { e.preventDefault(); onSelectExplore(); }} className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'explore' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
+                 <a href="#/explore" className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'explore' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
                     <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">🧭</span>
                     {t('exploreHabits')}
                 </a>
-                <a href="#" onClick={(e) => { e.preventDefault(); onSelectEvents(); }} className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'events' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
+                <a href="#/events" className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'events' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
                     <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">🗓️</span>
                     {t('events')}
                 </a>
-                <a href="#" onClick={(e) => { e.preventDefault(); onSelectMessagingList(); }} className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'messagingList' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
+                <a href="#/messages" className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'messagingList' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
                     <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">💬</span>
                     {t('messages')}
                 </a>
                  {currentUser?.isAdmin && (
-                    <a href="#" onClick={(e) => { e.preventDefault(); onSelectAdminView(); }} className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'admin' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
+                    <a href="#/admin" className={`flex items-center p-2.5 rounded-lg font-medium hover:bg-gray-100 dark:hover:bg-neutral-800 ${currentView === 'admin' ? 'text-primary dark:text-primary-400' : 'text-text-primary dark:text-neutral-300'}`}>
                         <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">🛡️</span>
                         {t('adminPanel')}
                     </a>
@@ -109,13 +109,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                 {currentUser && (
                     <>
                         <div className="mb-4">
-                            <h3 className="px-2.5 pt-2 pb-1 text-sm font-semibold text-text-secondary dark:text-neutral-400">{t('grupHabitSaya')}</h3>
+                            <a href="#/habits/group" className="block px-2.5 pt-2 pb-1 text-sm font-semibold text-text-secondary dark:text-neutral-400 hover:underline">{t('grupHabitSaya')}</a>
                             {groupHabits.length > 0 ? (
                                 groupHabits.map(habit => (
                                     <a
-                                        href="#"
+                                        href={`#/habit/${slugify(habit.name)}-${habit.id}`}
                                         key={habit.id}
-                                        onClick={(e) => { e.preventDefault(); onSelectHabit(habit.id); }}
                                         className={`flex items-center p-2.5 rounded-lg transition-all duration-200 group ${selectedHabitId === habit.id ? 'bg-primary-50 dark:bg-primary-500/10 font-bold text-primary dark:text-primary-300' : 'hover:bg-primary-50 dark:hover:bg-neutral-800 text-text-primary dark:text-neutral-300'}`}
                                     >
                                         <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">{getIconForTopic(habit.topic)}</span>
@@ -127,13 +126,12 @@ const Sidebar: React.FC<SidebarProps> = ({
                             )}
                         </div>
                         <div>
-                            <h3 className="px-2.5 pt-2 pb-1 text-sm font-semibold text-text-secondary dark:text-neutral-400">{t('privateHabitSaya')}</h3>
+                            <a href="#/habits/private" className="block px-2.5 pt-2 pb-1 text-sm font-semibold text-text-secondary dark:text-neutral-400 hover:underline">{t('privateHabitSaya')}</a>
                             {soloHabits.length > 0 ? (
                                 soloHabits.map(habit => (
                                     <a
-                                        href="#"
+                                        href={`#/habit/${slugify(habit.name)}-${habit.id}`}
                                         key={habit.id}
-                                        onClick={(e) => { e.preventDefault(); onSelectHabit(habit.id); }}
                                         className={`flex items-center p-2.5 rounded-lg transition-all duration-200 group ${selectedHabitId === habit.id ? 'bg-primary-50 dark:bg-primary-500/10 font-bold text-primary dark:text-primary-300' : 'hover:bg-primary-50 dark:hover:bg-neutral-800 text-text-primary dark:text-neutral-300'}`}
                                     >
                                         <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">{getIconForTopic(habit.topic)}</span>

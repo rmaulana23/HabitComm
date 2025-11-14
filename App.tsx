@@ -152,16 +152,11 @@ function appReducer(state: AppState, action: Action): AppState {
     switch (action.type) {
         case 'LOGIN':
             const userToLogin = action.payload;
-            // If we are on landing page, go to explore. 
-            // But if we are restoring session (isLandingPage=true initially), we might want to respect URL (handled in useEffect).
-            // The logic here: if it WAS landing page, go explore. If it was already app, stay put (or URL handles it).
-            const viewAfterLogin = state.isLandingPage ? 'explore' : state.currentView;
-            
-            // Ensure user is in the users array
+            // View logic handled by Effect now, but we update state
             const usersList = state.users.find(u => u.id === userToLogin.id) 
                 ? state.users.map(u => u.id === userToLogin.id ? userToLogin : u) 
                 : [...state.users, userToLogin];
-            return { ...state, currentUser: userToLogin, loggedInUserProfile: userToLogin, users: usersList, isAuthModalOpen: false, isLandingPage: false, currentView: viewAfterLogin };
+            return { ...state, currentUser: userToLogin, loggedInUserProfile: userToLogin, users: usersList, isAuthModalOpen: false, isLandingPage: false };
         case 'LOGOUT':
             return { ...initialState, isLandingPage: true, habits: state.habits, users: state.users, events: state.events, conversations: state.conversations };
         case 'REGISTER':
@@ -722,6 +717,112 @@ const App: React.FC = () => {
     const [postImage, setPostImage] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
+    // --- URL ROUTING LOGIC ---
+
+    // 1. Sync Hash -> State (Listener)
+    useEffect(() => {
+        const handleHashChange = () => {
+            const hash = window.location.hash.replace('#', '');
+            
+            if (!state.currentUser && !['/login', '/register'].includes(hash) && hash !== '') {
+                // If not logged in, we might want to allow exploring or redirect to landing
+                // For now, let's assume basic routes work, but detailed ones depend on auth state
+            }
+
+            if (hash === '' || hash === '/') {
+                // Landing page or explore depending on auth
+                if (state.currentUser) dispatch({ type: 'SELECT_EXPLORE' });
+            } else if (hash === '/explore') {
+                dispatch({ type: 'SELECT_EXPLORE' });
+            } else if (hash === '/events') {
+                dispatch({ type: 'SELECT_EVENTS' });
+            } else if (hash === '/messages') {
+                dispatch({ type: 'SELECT_MESSAGING_LIST' });
+            } else if (hash === '/admin') {
+                dispatch({ type: 'SELECT_ADMIN_VIEW' });
+            } else if (hash === '/habits/group') {
+                dispatch({ type: 'SELECT_GROUP_HABITS' });
+            } else if (hash === '/habits/private') {
+                dispatch({ type: 'SELECT_PRIVATE_HABITS' });
+            } else if (hash === '/create-habit') {
+                dispatch({ type: 'SELECT_CREATE_HABIT' });
+            } else if (hash.startsWith('/habit/')) {
+                // Format: /habit/slug-id  (Extract ID from end)
+                const parts = hash.split('-');
+                const habitId = parts.length > 1 ? parts.pop() : null; // Get last part
+                // If strict format isn't followed, fallback to assuming the whole slug is ID or finding by slug
+                // But standardizing on slug-ID is safer for this implementation.
+                // Let's try to find by ID directly first (if URL was just #/habit/habit_1)
+                
+                const rawIdFromUrl = hash.replace('/habit/', '');
+                // Check if it looks like "slug-id" or just "id"
+                // Our IDs are "habit_..."
+                let targetId = rawIdFromUrl;
+                if (rawIdFromUrl.includes('-habit_')) {
+                     targetId = 'habit_' + rawIdFromUrl.split('-habit_')[1];
+                }
+
+                if (targetId) {
+                    dispatch({ type: 'SELECT_HABIT', payload: targetId });
+                }
+            } else if (hash.startsWith('/profile/')) {
+                const userId = hash.replace('/profile/', '');
+                dispatch({ type: 'VIEW_PROFILE', payload: userId });
+            } else if (hash === '/login') {
+                dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' });
+            } else if (hash === '/register') {
+                dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' });
+            }
+        };
+
+        window.addEventListener('hashchange', handleHashChange);
+        // Run on mount to handle initial URL
+        handleHashChange();
+
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, [state.currentUser]); // Re-run if auth changes to potentially redirect
+
+    // 2. Sync State -> Hash (Broadcaster)
+    useEffect(() => {
+        if (state.isLandingPage && !state.currentUser) {
+            // Do not overwrite hash if on landing page unless specific modal is open
+            if (state.isAuthModalOpen && state.authModalView === 'login') {
+                 if (window.location.hash !== '#/login') window.location.hash = '/login';
+            } else if (state.isAuthModalOpen && state.authModalView === 'register') {
+                 if (window.location.hash !== '#/register') window.location.hash = '/register';
+            } else {
+                 // Clear hash on landing page base
+                 if (window.location.hash !== '' && window.location.hash !== '#/') {
+                     history.replaceState(null, '', ' ');
+                 }
+            }
+            return;
+        }
+
+        let newHash = '';
+        if (state.currentView === 'explore') newHash = '/explore';
+        else if (state.currentView === 'events') newHash = '/events';
+        else if (state.currentView === 'messagingList') newHash = '/messages';
+        else if (state.currentView === 'admin') newHash = '/admin';
+        else if (state.currentView === 'groupHabits') newHash = '/habits/group';
+        else if (state.currentView === 'privateHabits') newHash = '/habits/private';
+        else if (state.currentView === 'createHabit') newHash = '/create-habit';
+        else if (state.currentView === 'habit' && state.selectedHabitId) {
+            const habit = state.habits.find(h => h.id === state.selectedHabitId);
+            if (habit) {
+                newHash = `/habit/${slugify(habit.name)}-${habit.id}`;
+            }
+        }
+        else if (state.currentView === 'profile' && state.viewingProfileId) {
+            newHash = `/profile/${state.viewingProfileId}`;
+        }
+
+        if (newHash && window.location.hash.replace('#', '') !== newHash) {
+            window.location.hash = newHash;
+        }
+    }, [state.currentView, state.selectedHabitId, state.viewingProfileId, state.isLandingPage, state.isAuthModalOpen, state.authModalView]);
+
+
     // --- Supabase Auth & Sync ---
     
     // Fetch user profile from Supabase and map to app state
@@ -736,7 +837,6 @@ const App: React.FC = () => {
             let userProfileData = profile;
 
             if (error || !profile) {
-                console.warn("Profile not found in DB or fetch error (using fallback):", error);
                 // Fallback: Create temporary profile object from auth metadata if DB record is missing/slow
                 userProfileData = {
                     id: user.id,
@@ -1016,8 +1116,8 @@ const App: React.FC = () => {
         return (
             <>
                 <LandingPage 
-                    onLoginClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
-                    onRegisterClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' })}
+                    onLoginClick={() => window.location.hash = '/login'}
+                    onRegisterClick={() => window.location.hash = '/register'}
                     language={state.language}
                     onLanguageChange={(lang) => dispatch({ type: 'SET_LANGUAGE', payload: lang })}
                     t={t}
@@ -1028,7 +1128,10 @@ const App: React.FC = () => {
                         onLogin={handleLogin}
                         onRegister={handleRegister}
                         onForgotPassword={handleForgotPassword}
-                        onClose={() => dispatch({ type: 'CLOSE_AUTH_MODAL' })}
+                        onClose={() => {
+                            dispatch({ type: 'CLOSE_AUTH_MODAL' });
+                            window.history.replaceState(null, '', ' '); // Clear hash
+                        }}
                         t={t}
                     />
                 )}
@@ -1060,8 +1163,8 @@ const App: React.FC = () => {
                 <Header 
                     currentUser={state.currentUser} 
                     onLogout={handleLogout} 
-                    onLoginClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
-                    onRegisterClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' })}
+                    onLoginClick={() => window.location.hash = '/login'}
+                    onRegisterClick={() => window.location.hash = '/register'}
                     language={state.language}
                     onLanguageChange={(lang) => dispatch({ type: 'SET_LANGUAGE', payload: lang })}
                     theme={state.theme}
@@ -1316,7 +1419,10 @@ const App: React.FC = () => {
                         onLogin={handleLogin}
                         onRegister={handleRegister}
                         onForgotPassword={handleForgotPassword}
-                        onClose={() => dispatch({ type: 'CLOSE_AUTH_MODAL' })}
+                        onClose={() => {
+                            dispatch({ type: 'CLOSE_AUTH_MODAL' });
+                            window.history.replaceState(null, '', ' ');
+                        }}
                         t={t}
                     />
                 )}
