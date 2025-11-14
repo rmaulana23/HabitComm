@@ -865,8 +865,15 @@ const App: React.FC = () => {
 
     const handleLogout = async () => {
         setIsLoading(true);
-        await supabase.auth.signOut();
-        // Reducer LOGOUT is triggered by onAuthStateChange('SIGNED_OUT')
+        try {
+            await supabase.auth.signOut();
+        } catch (error) {
+            console.error("Logout failed:", error);
+        } finally {
+            // Force state update to ensure UI doesn't freeze
+            dispatch({ type: 'LOGOUT' });
+            setIsLoading(false);
+        }
     };
     
     const handleForgotPassword = async (email: string) => {
