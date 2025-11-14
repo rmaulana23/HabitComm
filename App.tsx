@@ -110,8 +110,7 @@ type Action =
     | { type: 'KICK_MEMBER'; payload: { habitId: string; userId: string } }
     | { type: 'MARK_NOTIFICATIONS_READ' }
     | { type: 'UPDATE_PREFERENCES'; payload: Partial<UserPreferences> }
-    | { type: 'SET_VIEW'; view: AppState['currentView'] }
-    | { type: 'OPEN_HABIT_FROM_URL'; habitId: string };
+    | { type: 'SET_VIEW'; view: AppState['currentView'] };
 
 const savedTheme = localStorage.getItem('habitcom-theme') || 'light';
 
@@ -711,8 +710,6 @@ function appReducer(state: AppState, action: Action): AppState {
              return { ...state, users: updatedUsersWithPrefs, currentUser: updatedUserWithPrefs };
         case 'SET_VIEW':
             return { ...state, currentView: action.view, selectedHabitId: null, viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
-        case 'OPEN_HABIT_FROM_URL':
-            return { ...state, currentView: 'habit', selectedHabitId: action.habitId, viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
         default:
             return state;
     }
@@ -818,81 +815,6 @@ const App: React.FC = () => {
             subscription.unsubscribe();
         };
     }, []);
-
-
-    // --- Routing Logic ---
-    
-    useEffect(() => {
-        // Only run routing logic after initial loading is complete to prevent overwriting state
-        if (isLoading) return;
-
-        const handleHashChange = () => {
-            const hash = window.location.hash.replace("#", "");
-            
-            if (!hash) {
-                // If logged in and no hash, maybe default to explore? 
-                // But appReducer's LOGIN already handles view setting based on isLandingPage.
-                return;
-            }
-
-            if (hash.startsWith("habit/")) {
-                const slug = hash.split("/")[1];
-                const habit = state.habits.find(h => slugify(h.name) === slug || h.id === slug);
-                if (habit) {
-                     dispatch({ type: "OPEN_HABIT_FROM_URL", habitId: habit.id });
-                }
-                return;
-            }
-
-             if (hash.startsWith("profile/")) {
-                const slug = hash.split("/")[1];
-                const user = state.users.find(u => slugify(u.name) === slug || u.id === slug);
-                 if (user) {
-                    dispatch({ type: "VIEW_PROFILE", payload: user.id });
-                 }
-                return;
-            }
-            
-            if (hash === "events") dispatch({ type: "SELECT_EVENTS" });
-            if (hash === "explore") dispatch({ type: "SELECT_EXPLORE" });
-            if (hash === "messages") dispatch({ type: "SELECT_MESSAGING_LIST" });
-            if (hash === "group-habits") dispatch({ type: "SELECT_GROUP_HABITS" });
-            if (hash === "private-habits") dispatch({ type: "SELECT_PRIVATE_HABITS" });
-        };
-
-        // Run once on mount (after loading)
-        handleHashChange();
-        
-        window.addEventListener("hashchange", handleHashChange);
-        return () => window.removeEventListener("hashchange", handleHashChange);
-    }, [isLoading, state.habits, state.users]); // Dependency on isLoading is critical
-
-
-    useEffect(() => {
-        if (state.isLandingPage || isLoading) {
-             return;
-        }
-
-        let newHash = "";
-        if (state.currentView === "explore") newHash = "explore";
-        else if (state.currentView === "events") newHash = "events";
-        else if (state.currentView === "messagingList") newHash = "messages";
-        else if (state.currentView === "groupHabits") newHash = "group-habits";
-        else if (state.currentView === "privateHabits") newHash = "private-habits";
-        else if (state.currentView === "habit" && state.selectedHabitId) {
-            const habit = state.habits.find(h => h.id === state.selectedHabitId);
-            if (habit) newHash = `habit/${slugify(habit.name)}`;
-        }
-        else if (state.currentView === "profile" && state.viewingProfileId) {
-             const user = state.users.find(u => u.id === state.viewingProfileId);
-             if (user) newHash = `profile/${slugify(user.name)}`;
-        }
-
-        if (newHash && window.location.hash !== `#${newHash}`) {
-            window.history.replaceState(null, "", `#${newHash}`);
-        }
-    }, [state.currentView, state.selectedHabitId, state.viewingProfileId, state.habits, state.users, state.isLandingPage, isLoading]);
-
 
     // --- Handlers ---
 
