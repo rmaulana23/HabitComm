@@ -153,7 +153,11 @@ function appReducer(state: AppState, action: Action): AppState {
     switch (action.type) {
         case 'LOGIN':
             const userToLogin = action.payload;
+            // If we are on landing page, go to explore. 
+            // But if we are restoring session (isLandingPage=true initially), we might want to respect URL (handled in useEffect).
+            // The logic here: if it WAS landing page, go explore. If it was already app, stay put (or URL handles it).
             const viewAfterLogin = state.isLandingPage ? 'explore' : state.currentView;
+            
             // Ensure user is in the users array
             const usersList = state.users.find(u => u.id === userToLogin.id) 
                 ? state.users.map(u => u.id === userToLogin.id ? userToLogin : u) 
@@ -732,78 +736,107 @@ const App: React.FC = () => {
                 .eq('id', user.id)
                 .single();
             
-            if (error) {
-                console.error("Error fetching profile:", error);
-                return;
+            let userProfileData = profile;
+
+            if (error || !profile) {
+                console.warn("Profile not found in DB or fetch error (using fallback):", error);
+                // Fallback: Create temporary profile object from auth metadata if DB record is missing/slow
+                userProfileData = {
+                    id: user.id,
+                    email: user.email,
+                    name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+                    avatar: user.user_metadata?.avatar || 'https://i.pravatar.cc/150',
+                    motto: "Ready to start!",
+                    member_since: new Date().toISOString(),
+                    total_days_active: 0,
+                    level: "Newbie",
+                    cheers_given: 0,
+                    pushes_given: 0,
+                    check_in_percentage: 0,
+                    preferences: { showStats: true, showBadges: true, showDailyTips: false, showTools: true },
+                    is_admin: false
+                };
             }
 
-            if (profile) {
-                // Map snake_case DB fields to camelCase app state
-                const userProfile: UserProfile = {
-                    id: profile.id,
-                    name: profile.name || user.email?.split('@')[0] || 'User',
-                    avatar: profile.avatar || 'https://i.pravatar.cc/150',
-                    email: profile.email || user.email,
-                    motto: profile.motto || "Ready to start!",
-                    memberSince: new Date(profile.member_since || new Date()),
-                    totalDaysActive: profile.total_days_active || 0,
-                    level: profile.level || "Newbie",
-                    cheersGiven: profile.cheers_given || 0,
-                    pushesGiven: profile.pushes_given || 0,
-                    checkInPercentage: profile.check_in_percentage || 0,
-                    preferences: profile.preferences || { showStats: true, showBadges: true, showDailyTips: false, showTools: false },
-                    streaks: [], // TODO: Fetch streaks from DB
-                    badges: [],
-                    notifications: [],
-                    isAdmin: profile.is_admin
-                };
-                dispatch({ type: 'LOGIN', payload: userProfile });
-            }
+            const userProfile: UserProfile = {
+                id: userProfileData.id,
+                name: userProfileData.name,
+                avatar: userProfileData.avatar,
+                email: userProfileData.email,
+                motto: userProfileData.motto,
+                memberSince: new Date(userProfileData.member_since),
+                totalDaysActive: userProfileData.total_days_active,
+                level: userProfileData.level,
+                cheersGiven: userProfileData.cheers_given,
+                pushesGiven: userProfileData.pushes_given,
+                checkInPercentage: userProfileData.check_in_percentage,
+                preferences: userProfileData.preferences,
+                streaks: [], // TODO: Fetch streaks from DB
+                badges: [],
+                notifications: [],
+                isAdmin: userProfileData.is_admin
+            };
+            
+            dispatch({ type: 'LOGIN', payload: userProfile });
         } catch (err) {
-            console.error("Unexpected error fetching profile:", err);
+            console.error("Unexpected error in fetchAndSetUser:", err);
         }
     };
 
     useEffect(() => {
-        const checkSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                await fetchAndSetUser(session.user);
-            }
-            setIsLoading(false);
-        };
-        checkSession();
+        let mounted = true;
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            if (session?.user) {
-                await fetchAndSetUser(session.user);
-            } else {
+        const initAuth = async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user) {
+                    await fetchAndSetUser(session.user);
+                } else {
+                    // No session, stop loading (landing page will show)
+                }
+            } catch (err) {
+                console.error("Auth init error:", err);
+            } finally {
+                if (mounted) setIsLoading(false);
+            }
+        };
+
+        initAuth();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (event === 'SIGNED_OUT') {
                 dispatch({ type: 'LOGOUT' });
+                if (mounted) setIsLoading(false);
+            } else if (session?.user && event !== 'INITIAL_SESSION') {
+                // Handle sign in or token refresh
+                await fetchAndSetUser(session.user);
             }
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            mounted = false;
+            subscription.unsubscribe();
+        };
     }, []);
 
 
     // --- Routing Logic ---
     
     useEffect(() => {
+        // Only run routing logic after initial loading is complete to prevent overwriting state
+        if (isLoading) return;
+
         const handleHashChange = () => {
             const hash = window.location.hash.replace("#", "");
             
             if (!hash) {
-                // Landing page logic handles view state based on auth status separately
+                // If logged in and no hash, maybe default to explore? 
+                // But appReducer's LOGIN already handles view setting based on isLandingPage.
                 return;
             }
 
             if (hash.startsWith("habit/")) {
                 const slug = hash.split("/")[1];
-                // Reverse lookup habit by slug (name) if possible, or just by ID if simpler.
-                // For now, assuming we pass ID in URL for simplicity or need a map.
-                // The slugify logic suggested earlier used name. Let's stick to ID for reliability or find by name.
-                // Ideally we'd have a map of slug -> ID.
-                // For this implementation, let's try to find a habit that matches the slugified name
                 const habit = state.habits.find(h => slugify(h.name) === slug || h.id === slug);
                 if (habit) {
                      dispatch({ type: "OPEN_HABIT_FROM_URL", habitId: habit.id });
@@ -827,15 +860,16 @@ const App: React.FC = () => {
             if (hash === "private-habits") dispatch({ type: "SELECT_PRIVATE_HABITS" });
         };
 
+        // Run once on mount (after loading)
         handleHashChange();
+        
         window.addEventListener("hashchange", handleHashChange);
         return () => window.removeEventListener("hashchange", handleHashChange);
-    }, [state.habits, state.users]);
+    }, [isLoading, state.habits, state.users]); // Dependency on isLoading is critical
 
 
     useEffect(() => {
-        if (state.isLandingPage) {
-             // Don't overwrite hash on landing page unless logged in logic dictates
+        if (state.isLandingPage || isLoading) {
              return;
         }
 
@@ -857,7 +891,7 @@ const App: React.FC = () => {
         if (newHash && window.location.hash !== `#${newHash}`) {
             window.history.replaceState(null, "", `#${newHash}`);
         }
-    }, [state.currentView, state.selectedHabitId, state.viewingProfileId, state.habits, state.users, state.isLandingPage]);
+    }, [state.currentView, state.selectedHabitId, state.viewingProfileId, state.habits, state.users, state.isLandingPage, isLoading]);
 
 
     // --- Handlers ---
@@ -884,6 +918,7 @@ const App: React.FC = () => {
         if (error) {
             alert(error.message);
         }
+        // setIsLoading(false) handled by onAuthStateChange or should be reset if error
     };
     
     const handleRegister = async (name: string, email: string, pass: string) => {
@@ -907,7 +942,9 @@ const App: React.FC = () => {
     };
 
     const handleLogout = async () => {
+        setIsLoading(true);
         await supabase.auth.signOut();
+        // Reducer LOGOUT is triggered by onAuthStateChange('SIGNED_OUT')
     };
     
     const handleForgotPassword = async (email: string) => {
