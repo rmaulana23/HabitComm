@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Habit, UserProfile, Language } from '../types';
 import { getIconForTopic } from '../utils';
@@ -8,7 +9,6 @@ interface SidebarProps {
     selectedHabitId: string | null;
     onSelectHabit: (id: string) => void;
     onSelectCreateHabit: () => void;
-    // FIX: Added 'comingSoon', 'groupHabits' and 'privateHabits' to the type to match the AppState and resolve the type error.
     currentView: 'habit' | 'profile' | 'explore' | 'createHabit' | 'events' | 'messagingList' | 'admin' | 'comingSoon' | 'groupHabits' | 'privateHabits';
     currentUser: UserProfile | null;
     onSelectExplore: () => void;
@@ -19,28 +19,35 @@ interface SidebarProps {
     onSelectEvents: () => void;
     onSelectMessagingList: () => void;
     onSelectAdminView: () => void;
+    onMarkRead: () => void;
     t: (key: string) => string;
     language: Language;
 }
 
-const ProfileHeader: React.FC<{ user: UserProfile, onViewProfile: (userId: string) => void, onOpenEditProfile: () => void, t: (key: string) => string, language: Language }> = ({ user, onViewProfile, onOpenEditProfile, t, language }) => (
-    <div className="text-center p-4 border-b border-border-color dark:border-neutral-800">
-        <button onClick={() => onViewProfile(user.id)} className="relative group w-20 h-20 mx-auto">
-            <img src={user.avatar} alt={user.name} className="w-20 h-20 rounded-full mx-auto ring-2 ring-primary-200 group-hover:ring-4 transition-all" />
-            <div className="absolute -bottom-1 -right-1 bg-white dark:bg-neutral-900 rounded-full p-0.5">
-              <VerifiedIcon className="w-5 h-5 text-blue-500" />
-            </div>
-        </button>
-        <div className="mt-2 flex items-center justify-center space-x-1">
-            <h2 className="text-lg font-bold text-text-primary dark:text-neutral-200">{user.name}</h2>
-            <button onClick={onOpenEditProfile} className="text-gray-400 hover:text-primary transition-colors">
-                <span>✏️</span>
+const ProfileHeader: React.FC<{ user: UserProfile, onViewProfile: (userId: string) => void, onOpenEditProfile: () => void, onMarkRead: () => void, t: (key: string) => string, language: Language }> = ({ user, onViewProfile, onOpenEditProfile, onMarkRead, t, language }) => {
+    const hasUnread = user.notifications.some(n => !n.isRead);
+    return (
+        <div className="text-center p-4 border-b border-border-color dark:border-neutral-800">
+            <button onClick={() => { onViewProfile(user.id); onMarkRead(); }} className="relative group w-20 h-20 mx-auto">
+                <img src={user.avatar} alt={user.name} className="w-20 h-20 rounded-full mx-auto ring-2 ring-primary-200 group-hover:ring-4 transition-all" />
+                <div className="absolute -bottom-1 -right-1 bg-white dark:bg-neutral-900 rounded-full p-0.5">
+                  <VerifiedIcon className="w-5 h-5 text-blue-500" />
+                </div>
+                {hasUnread && (
+                    <span className="absolute top-1 right-1 block h-4 w-4 rounded-full bg-red-500 ring-2 ring-white dark:ring-neutral-900 z-10" />
+                )}
             </button>
+            <div className="mt-2 flex items-center justify-center space-x-1">
+                <h2 className="text-lg font-bold text-text-primary dark:text-neutral-200">{user.name}</h2>
+                <button onClick={onOpenEditProfile} className="text-gray-400 hover:text-primary transition-colors">
+                    <span>✏️</span>
+                </button>
+            </div>
+            <p className="text-xs text-text-secondary dark:text-neutral-400 mt-1 italic px-2 truncate">"{user.motto}"</p>
+            <p className="text-xs text-text-secondary dark:text-neutral-400">{t('joinedSince')} {user.memberSince.toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { year: 'numeric', month: 'long' })}</p>
         </div>
-        <p className="text-xs text-text-secondary dark:text-neutral-400 mt-1 italic px-2 truncate">"{user.motto}"</p>
-        <p className="text-xs text-text-secondary dark:text-neutral-400">{t('joinedSince')} {user.memberSince.toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US', { year: 'numeric', month: 'long' })}</p>
-    </div>
-);
+    );
+};
 
 const Sidebar: React.FC<SidebarProps> = ({ 
     habits, 
@@ -57,6 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     onSelectEvents,
     onSelectMessagingList,
     onSelectAdminView,
+    onMarkRead,
     t,
     language
 }) => {
@@ -66,7 +74,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     
     return (
         <aside className="hidden md:flex w-64 bg-white dark:bg-neutral-900 flex-col shrink-0 border-r border-border-color dark:border-neutral-800">
-            {currentUser && <ProfileHeader user={currentUser} onViewProfile={onViewProfile} onOpenEditProfile={onOpenEditProfile} t={t} language={language} />}
+            {currentUser && <ProfileHeader user={currentUser} onViewProfile={onViewProfile} onOpenEditProfile={onOpenEditProfile} onMarkRead={onMarkRead} t={t} language={language} />}
             
             <div className="p-4 space-y-2">
                 <button 
@@ -139,15 +147,6 @@ const Sidebar: React.FC<SidebarProps> = ({
                     </>
                 )}
             </div>
-
-            {currentUser && (
-                <div className="space-y-1 p-4 border-t border-border-color dark:border-neutral-800">
-                    <a href="#" onClick={(e) => { e.preventDefault(); onOpenSettings(); }} className="flex items-center p-2.5 rounded-lg font-medium text-text-primary dark:text-neutral-300 hover:bg-gray-100 dark:hover:bg-neutral-800">
-                        <span className="w-5 h-5 mr-3 text-lg flex items-center justify-center">⚙️</span>
-                        {t('settings')}
-                    </a>
-                </div>
-            )}
         </aside>
     );
 };

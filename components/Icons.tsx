@@ -6,11 +6,11 @@ interface IconProps {
 }
 
 export const Logo: React.FC<IconProps> = ({ className }) => (
-  <img src="https://imgur.com/E1Pwi9v.jpg" alt="HabitComm Logo" className={className} />
+  <img src="https://imgur.com/BaQyocw.jpg" alt="HabitComm Logo" className={className} />
 );
 
 export const AppLogo: React.FC<IconProps> = ({ className }) => (
-  <img src="https://imgur.com/dywhqjO.jpg" alt="HabitComm Logo" className={className} />
+  <img src="https://imgur.com/g393BDb.jpg" alt="HabitComm Logo" className={className} />
 );
 
 export const UserIcon: React.FC<IconProps> = ({ className }) => (
@@ -72,7 +72,7 @@ export const GroupIcon: React.FC<IconProps> = ({ className }) => (
 
 export const PrivateIcon: React.FC<IconProps> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25z" />
     </svg>
 );
 

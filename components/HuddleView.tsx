@@ -1,8 +1,9 @@
+
 import React, { useRef } from 'react';
 import { Habit, User, ReactionType, UserProfile } from '../types';
 import PostCard from './PostCard';
 import HabitProgress from './HabitProgress';
-import { SettingsIcon } from './Icons';
+import { SettingsIcon, UserIcon } from './Icons';
 
 interface HabitViewProps {
     selectedHabit: Habit | undefined;
@@ -19,6 +20,7 @@ interface HabitViewProps {
     handleBoostHabit: (habitId: string) => void;
     onOpenManageMembers: (habitId: string) => void;
     onViewProfile: (userId: string) => void;
+    onOpenJoinRequests?: (habitId: string) => void; // Optional for now to avoid breaking changes if not passed immediately
     t: (key: string) => string;
     boostedHabitId: string | null;
 }
@@ -38,6 +40,7 @@ const HabitView: React.FC<HabitViewProps> = ({
     handleBoostHabit,
     onOpenManageMembers,
     onViewProfile,
+    onOpenJoinRequests,
     t,
     boostedHabitId
 }) => {
@@ -60,16 +63,30 @@ const HabitView: React.FC<HabitViewProps> = ({
     const isMember = selectedHabit.members.some(m => m.id === currentUser.id);
     const isCreator = selectedHabit.creatorId === currentUser.id;
     const isBoostActive = !!boostedHabitId;
+    const hasPendingRequests = (selectedHabit.pendingMembers || []).length > 0;
 
     return (
         <div className="flex-1 flex flex-col h-full">
             <header className="p-6 border-b border-border-color dark:border-neutral-800 flex-shrink-0 bg-white/50 dark:bg-neutral-950/50 backdrop-blur-sm flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-bold text-text-primary dark:text-neutral-200">{selectedHabit.name}</h2>
+                    <div className="flex items-center gap-2">
+                         <h2 className="text-2xl font-bold text-text-primary dark:text-neutral-200">{selectedHabit.name}</h2>
+                         {selectedHabit.isLocked && <span title={t('privateGroup')} className="text-lg">🔒</span>}
+                    </div>
                     <p className="text-text-secondary dark:text-neutral-400">{selectedHabit.description}</p>
                 </div>
                 {isMember && isCreator && (
                     <div className="flex items-center space-x-2">
+                        {hasPendingRequests && onOpenJoinRequests && (
+                            <button 
+                                onClick={() => onOpenJoinRequests(selectedHabit.id)}
+                                title={t('pendingRequests')}
+                                className="relative flex items-center justify-center bg-primary-100 dark:bg-primary-900/30 text-primary dark:text-primary-300 font-bold p-3 rounded-lg hover:bg-primary-200 dark:hover:bg-primary-900/50 transition-all shadow-sm"
+                            >
+                                <UserIcon className="w-6 h-6" />
+                                <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full animate-pulse"></span>
+                            </button>
+                        )}
                         <button 
                             onClick={() => onOpenManageMembers(selectedHabit.id)}
                             title={t('manageMembers')}

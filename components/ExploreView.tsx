@@ -22,7 +22,17 @@ const ExploreView: React.FC<ExploreViewProps> = ({ allHabits, currentUser, onJoi
     
     // Determine the state for the quick join button
     const isMember = currentUser && habitOfTheDay ? habitOfTheDay.members.some(m => m.id === currentUser.id) : false;
+    const isPending = currentUser && habitOfTheDay ? (habitOfTheDay.pendingMembers || []).includes(currentUser.id) : false;
     const isFull = habitOfTheDay ? habitOfTheDay.members.length >= habitOfTheDay.memberLimit : false;
+
+    const isDisabled = isMember || isFull || isPending;
+
+    const getQuickJoinText = () => {
+        if (isMember) return t('joined');
+        if (isPending) return t('requested');
+        if (isFull) return t('full');
+        return t('quickJoin');
+    };
 
     return (
         <div className="flex-1 p-6 overflow-y-auto animate-fade-in flex flex-col">
@@ -61,13 +71,17 @@ const ExploreView: React.FC<ExploreViewProps> = ({ allHabits, currentUser, onJoi
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                if (!isMember && !isFull) onJoinHabit(habitOfTheDay.id);
+                                if (!isDisabled) onJoinHabit(habitOfTheDay.id);
                             }}
-                            disabled={isMember || isFull}
-                            className="flex items-center justify-center font-bold bg-white text-primary px-5 py-2.5 rounded-lg shadow-sm hover:bg-red-50 transition-colors disabled:bg-white/50 disabled:text-primary/70 disabled:cursor-not-allowed"
+                            disabled={isDisabled}
+                            className={`flex items-center justify-center font-bold px-5 py-2.5 rounded-lg shadow-sm transition-colors disabled:cursor-not-allowed ${
+                                isPending 
+                                    ? 'bg-amber-400 text-white hover:bg-amber-500 disabled:bg-amber-400/80' 
+                                    : 'bg-white text-primary hover:bg-red-50 disabled:bg-white/50 disabled:text-primary/70'
+                            }`}
                         >
-                            <span className="mr-2">⚡️</span>
-                            {isMember ? t('joined') : isFull ? t('full') : t('quickJoin')}
+                            <span className="mr-2">{isPending ? '🔒' : '⚡️'}</span>
+                            {getQuickJoinText()}
                         </button>
                     </div>
                 </div>

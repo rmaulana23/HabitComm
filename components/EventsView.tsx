@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useMemo } from 'react';
 import { Event } from '../types';
 
 interface EventsViewProps {
@@ -25,6 +26,18 @@ const EventCard: React.FC<{ event: Event, t: (key: string) => string, onClick: (
 
 
 const EventsView: React.FC<EventsViewProps> = ({ events, t, onCreateEvent, onViewEvent }) => {
+    
+    const upcomingEvents = useMemo(() => {
+        // Get today's date in YYYY-MM-DD format (local time) to compare with event.date string
+        const today = new Date();
+        const todayStr = today.toLocaleDateString('en-CA'); // Returns YYYY-MM-DD in local timezone
+        
+        return events.filter(event => {
+            // Simple string comparison works because format is YYYY-MM-DD
+            return event.date >= todayStr;
+        }).sort((a, b) => a.date.localeCompare(b.date));
+    }, [events]);
+
     return (
         <div className="flex-1 p-6 overflow-y-auto animate-fade-in flex flex-col">
             <div className="flex justify-between items-center mb-6">
@@ -38,9 +51,16 @@ const EventsView: React.FC<EventsViewProps> = ({ events, t, onCreateEvent, onVie
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {events.map(event => (
-                    <EventCard key={event.id} event={event} t={t} onClick={() => onViewEvent(event)} />
-                ))}
+                {upcomingEvents.length > 0 ? (
+                    upcomingEvents.map(event => (
+                        <EventCard key={event.id} event={event} t={t} onClick={() => onViewEvent(event)} />
+                    ))
+                ) : (
+                    <div className="col-span-full flex flex-col items-center justify-center text-text-secondary dark:text-neutral-400 py-20">
+                        <span className="text-4xl mb-4">📅</span>
+                        <p className="text-lg font-medium">{t('noEventsYet')}</p>
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -1,7 +1,10 @@
+
 import React, { useReducer, useState, useEffect } from 'react';
-import { AppState, Habit, User, Post, ReactionType, UserProfile, HabitStreak, StreakLog, Language, Comment, Event, Conversation, PrivateMessage, Notification, NotificationType, BoostRequest } from './types';
+import { AppState, Habit, User, Post, ReactionType, UserProfile, HabitStreak, StreakLog, Language, Comment, Event, Conversation, PrivateMessage, Notification, NotificationType, BoostRequest, UserPreferences } from './types';
 import { getInitialData } from './data';
 import { translations } from './translations';
+import { supabase } from './supabaseClient';
+import { FullPageSpinner } from './components/AuthShared';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import HabitView from './components/HuddleView';
@@ -29,6 +32,9 @@ import BottomNavbar from './components/BottomNavbar';
 import UserHabitsListView from './components/UserHabitsListView';
 import ManageMembersModal from './components/ManageMembersModal';
 import LandingPage from './components/LandingPage';
+import JoinRequestModal from './components/JoinRequestModal';
+import JoinRequestsAdminModal from './components/JoinRequestsAdminModal';
+import { slugify } from './utils';
 
 
 // --- MOCK DATA ---
@@ -52,6 +58,13 @@ type Action =
     | { type: 'ADD_REACTION'; payload: { habitId: string; postId: string; reactionType: ReactionType } }
     | { type: 'ADD_COMMENT'; payload: { habitId: string; postId: string; comment: Comment } }
     | { type: 'JOIN_HABIT'; payload: string }
+    | { type: 'REQUEST_JOIN_HABIT'; payload: string }
+    | { type: 'OPEN_JOIN_REQUEST_MODAL'; payload: string }
+    | { type: 'CLOSE_JOIN_REQUEST_MODAL' }
+    | { type: 'OPEN_JOIN_REQUESTS_ADMIN_MODAL'; payload: string }
+    | { type: 'CLOSE_JOIN_REQUESTS_ADMIN_MODAL' }
+    | { type: 'APPROVE_JOIN_REQUEST'; payload: { habitId: string; userId: string } }
+    | { type: 'REJECT_JOIN_REQUEST'; payload: { habitId: string; userId: string } }
     | { type: 'VIEW_HABIT_DETAIL'; payload: Habit }
     | { type: 'CLOSE_HABIT_DETAIL' }
     | { type: 'OPEN_ADD_HABIT_MODAL' }
@@ -94,7 +107,11 @@ type Action =
     | { type: 'SELECT_PRIVATE_HABITS' }
     | { type: 'OPEN_MANAGE_MEMBERS_MODAL'; payload: string }
     | { type: 'CLOSE_MANAGE_MEMBERS_MODAL' }
-    | { type: 'KICK_MEMBER'; payload: { habitId: string; userId: string } };
+    | { type: 'KICK_MEMBER'; payload: { habitId: string; userId: string } }
+    | { type: 'MARK_NOTIFICATIONS_READ' }
+    | { type: 'UPDATE_PREFERENCES'; payload: Partial<UserPreferences> }
+    | { type: 'SET_VIEW'; view: AppState['currentView'] }
+    | { type: 'OPEN_HABIT_FROM_URL'; habitId: string };
 
 const savedTheme = localStorage.getItem('habitcom-theme') || 'light';
 
@@ -128,389 +145,415 @@ const initialState: AppState = {
     boostRequests: [],
     isManageMembersModalOpen: { isOpen: false, habitId: null },
     isLandingPage: true,
+    isJoinRequestModalOpen: { isOpen: false, habitId: null },
+    isJoinRequestsAdminModalOpen: { isOpen: false, habitId: null },
 };
 
 function appReducer(state: AppState, action: Action): AppState {
     switch (action.type) {
         case 'LOGIN':
             const userToLogin = action.payload;
-            const viewAfterLogin = userToLogin.isAdmin ? 'admin' : 'explore';
-            return { 
-                ...state, 
-                currentUser: userToLogin, 
-                loggedInUserProfile: userToLogin,
-                currentView: viewAfterLogin,
-                viewingProfileId: userToLogin.id,
-                isAuthModalOpen: false,
-                isLandingPage: false,
-            };
+            const viewAfterLogin = state.isLandingPage ? 'explore' : state.currentView;
+            // Ensure user is in the users array
+            const usersList = state.users.find(u => u.id === userToLogin.id) 
+                ? state.users.map(u => u.id === userToLogin.id ? userToLogin : u) 
+                : [...state.users, userToLogin];
+            return { ...state, currentUser: userToLogin, loggedInUserProfile: userToLogin, users: usersList, isAuthModalOpen: false, isLandingPage: false, currentView: viewAfterLogin };
         case 'LOGOUT':
-            return {
-                ...state,
-                currentUser: null,
-                loggedInUserProfile: null,
-                currentView: 'explore',
-                selectedHabitId: null,
-                viewingProfileId: null,
-                isSettingsOpen: false,
-                isLandingPage: true,
-            };
+            return { ...initialState, isLandingPage: true, habits: state.habits, users: state.users, events: state.events, conversations: state.conversations };
         case 'REGISTER':
-            const newUser = action.payload;
-            return {
-                ...state,
-                users: [...state.users, newUser],
-                currentUser: newUser,
-                loggedInUserProfile: newUser,
-                currentView: 'explore',
-                viewingProfileId: newUser.id,
-                isAuthModalOpen: false,
-                isLandingPage: false,
-            };
+             const newUser = action.payload;
+             return { ...state, currentUser: newUser, loggedInUserProfile: newUser, users: [...state.users, newUser], isAuthModalOpen: false, isLandingPage: false, currentView: 'explore' };
         case 'OPEN_AUTH_MODAL':
-            return {
-                ...state,
-                isAuthModalOpen: true,
-                authModalView: action.payload,
-            };
+            return { ...state, isAuthModalOpen: true, authModalView: action.payload };
         case 'CLOSE_AUTH_MODAL':
-            return {
-                ...state,
-                isAuthModalOpen: false,
-            };
+            return { ...state, isAuthModalOpen: false };
         case 'ENTER_APP':
-            return {
-                ...state,
-                isLandingPage: false,
-            };
+             return { ...state, isLandingPage: false };
         case 'SELECT_HABIT':
-            if (!state.currentUser) {
-                return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-            return { ...state, selectedHabitId: action.payload, currentView: 'habit', viewingProfileId: null };
+            return { ...state, selectedHabitId: action.payload, currentView: 'habit', viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
         case 'SELECT_EXPLORE':
-            return { ...state, currentView: 'explore', selectedHabitId: null, viewingProfileId: null };
+            return { ...state, currentView: 'explore', selectedHabitId: null, viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
+        case 'SELECT_EVENTS':
+            return { ...state, currentView: 'events', selectedHabitId: null, viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
+        case 'SELECT_MESSAGING_LIST':
+            return { ...state, currentView: 'messagingList', selectedHabitId: null, viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
+        case 'SELECT_ADMIN_VIEW':
+            return { ...state, currentView: 'admin', selectedHabitId: null, viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
+        case 'SELECT_GROUP_HABITS':
+            return { ...state, currentView: 'groupHabits', selectedHabitId: null, viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
+        case 'SELECT_PRIVATE_HABITS':
+            return { ...state, currentView: 'privateHabits', selectedHabitId: null, viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
         case 'VIEW_PROFILE':
-            if (!state.currentUser) {
-                 return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-            return { ...state, currentView: 'profile', selectedHabitId: null, viewingProfileId: action.payload };
+            return { ...state, viewingProfileId: action.payload, currentView: 'profile', viewingHabitDetail: null, viewingEventDetail: null };
         case 'SELECT_CREATE_HABIT':
-             if (!state.currentUser) {
-                return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-            return { ...state, currentView: 'createHabit', selectedHabitId: null, viewingProfileId: null };
-        case 'CREATE_HABIT': {
-            const newHabit = action.payload;
-            if (!state.loggedInUserProfile) return state;
-
-            const newStreak: HabitStreak = {
-                id: `streak_${Date.now()}`,
-                habitId: newHabit.id,
-                name: newHabit.name,
-                topic: newHabit.topic,
-                logs: [],
+            return { ...state, currentView: 'createHabit', selectedHabitId: null, viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
+        case 'CREATE_HABIT':
+            const newHabitId = `habit_${Date.now()}`;
+            const newHabit: Habit = {
+                ...action.payload,
+                id: newHabitId,
+                members: state.currentUser ? [state.currentUser] : [],
+                pendingMembers: [],
+                posts: [],
+                memberLimit: 20, // Default limit
+                creatorId: state.currentUser ? state.currentUser.id : 'unknown',
             };
-
-            const updatedProfileOnCreate = {
-                    ...state.loggedInUserProfile,
-                    streaks: [...state.loggedInUserProfile.streaks, newStreak],
-            };
-
+            const updatedUsersWithStreak = state.users.map(u => {
+                if (u.id === state.currentUser?.id) {
+                    return {
+                        ...u,
+                        streaks: [...u.streaks, { id: `streak_${Date.now()}`, habitId: newHabitId, name: newHabit.name, topic: newHabit.topic, logs: [] }]
+                    }
+                }
+                return u;
+            });
             return {
                 ...state,
-                habits: [newHabit, ...state.habits],
-                loggedInUserProfile: updatedProfileOnCreate,
-                users: state.users.map(u => u.id === state.loggedInUserProfile!.id ? updatedProfileOnCreate : u),
-                selectedHabitId: newHabit.type === 'group' ? newHabit.id : null,
-                currentView: newHabit.type === 'group' ? 'habit' : 'profile',
-                viewingProfileId: newHabit.type === 'private' ? state.loggedInUserProfile.id : null,
+                habits: [...state.habits, newHabit],
+                users: updatedUsersWithStreak,
+                currentUser: updatedUsersWithStreak.find(u => u.id === state.currentUser?.id) || null,
+                currentView: 'habit',
+                selectedHabitId: newHabitId
             };
-        }
-        case 'ADD_POST': {
-            if (!state.currentUser) {
-                 return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-            
-            const habit = state.habits.find(h => h.id === action.payload.habitId);
-            if (!habit) return state;
-
-            const updatedUsersWithNotifications = state.users.map(user => {
-                const isMember = habit.members.some(m => m.id === user.id);
-                if (isMember && user.id !== state.currentUser!.id) {
-                    const newNotification: Notification = {
-                        id: `notif_${Date.now()}_${user.id}`,
-                        type: NotificationType.NEW_POST,
-                        sender: state.currentUser!,
-                        habit: { id: habit.id, name: habit.name },
-                        postContent: action.payload.post.content.substring(0, 30) + '...',
-                        isRead: false,
-                        timestamp: new Date(),
-                    };
-                    return { ...user, notifications: [newNotification, ...user.notifications] };
+        case 'ADD_POST':
+            const updatedHabitsPost = state.habits.map(habit => {
+                if (habit.id === action.payload.habitId) {
+                    return { ...habit, posts: [action.payload.post, ...habit.posts] };
                 }
-                return user;
+                return habit;
+            });
+             // Notify other members
+            const notifSenderPost = state.currentUser!;
+            const habitPost = state.habits.find(h => h.id === action.payload.habitId);
+            const updatedUsersPost = state.users.map(u => {
+                if (habitPost && habitPost.members.some(m => m.id === u.id) && u.id !== notifSenderPost.id) {
+                    const newNotification: Notification = {
+                        id: `notif_${Date.now()}_${Math.random()}`,
+                        type: NotificationType.NEW_POST,
+                        sender: notifSenderPost,
+                        habit: { id: habitPost.id, name: habitPost.name },
+                        postContent: action.payload.post.content.substring(0, 30) + (action.payload.post.content.length > 30 ? '...' : ''),
+                        isRead: false,
+                        timestamp: new Date()
+                    };
+                    return { ...u, notifications: [newNotification, ...u.notifications] };
+                }
+                return u;
             });
 
-            return {
-                ...state,
-                habits: state.habits.map(h =>
-                    h.id === action.payload.habitId
-                        ? { ...h, posts: [action.payload.post, ...h.posts].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()) }
-                        : h
-                ),
-                users: updatedUsersWithNotifications,
-                loggedInUserProfile: updatedUsersWithNotifications.find(u => u.id === state.loggedInUserProfile?.id) || state.loggedInUserProfile,
-            };
-        }
-        case 'ADD_REACTION': {
-             if (!state.currentUser) {
-                return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-
-            const habit = state.habits.find(h => h.id === action.payload.habitId);
-            const post = habit?.posts.find(p => p.id === action.payload.postId);
-            if (!post || !habit || post.author.id === state.currentUser.id) return state; // Don't notify for self-reactions
+            return { ...state, habits: updatedHabitsPost, users: updatedUsersPost, currentUser: updatedUsersPost.find(u => u.id === state.currentUser?.id) || null };
+        case 'ADD_REACTION':
+            const updatedHabitsReaction = state.habits.map(habit => {
+                if (habit.id === action.payload.habitId) {
+                    const updatedPosts = habit.posts.map(post => {
+                        if (post.id === action.payload.postId) {
+                            // Simple toggle or add logic could go here. For now, just adding.
+                            // Ideally check if user already reacted.
+                            const existingReaction = post.reactions.find(r => r.userId === state.currentUser?.id && r.type === action.payload.reactionType);
+                            if (existingReaction) return post; // Already reacted
+                            return { ...post, reactions: [...post.reactions, { userId: state.currentUser!.id, type: action.payload.reactionType }] };
+                        }
+                        return post;
+                    });
+                    return { ...habit, posts: updatedPosts };
+                }
+                return habit;
+            });
+             // Notify post author
+            const habitReact = state.habits.find(h => h.id === action.payload.habitId);
+            const postReact = habitReact?.posts.find(p => p.id === action.payload.postId);
+            const notifSenderReact = state.currentUser!;
             
-            let usersWithNewNotification = state.users;
-            const postAuthorProfile = state.users.find(u => u.id === post.author.id);
-            if (postAuthorProfile) {
-                const newNotification: Notification = {
-                    id: `notif_${Date.now()}`,
-                    type: NotificationType.NEW_REACTION,
-                    sender: state.currentUser,
-                    habit: { id: habit.id, name: habit.name },
-                    reactionType: action.payload.reactionType,
-                    isRead: false,
-                    timestamp: new Date(),
-                };
-                usersWithNewNotification = state.users.map(u => u.id === post.author.id ? { ...u, notifications: [newNotification, ...u.notifications] } : u);
-            }
+            let updatedUsersReact = state.users;
 
-            return {
-                ...state,
-                habits: state.habits.map(h => {
-                    if (h.id !== action.payload.habitId) return h;
-                    return {
-                        ...h,
-                        posts: h.posts.map(p => {
-                            if (p.id !== action.payload.postId) return p;
-                            const reactionIndex = p.reactions.findIndex(r => r.userId === state.currentUser!.id);
-                            if (reactionIndex > -1) {
-                                if (p.reactions[reactionIndex].type === action.payload.reactionType) {
-                                    return { ...p, reactions: p.reactions.filter(r => r.userId !== state.currentUser!.id) };
-                                } else {
-                                     return { ...p, reactions: [...p.reactions.filter(r => r.userId !== state.currentUser!.id), { userId: state.currentUser!.id, type: action.payload.reactionType }] };
-                                }
-                            } else {
-                                return { ...p, reactions: [...p.reactions, { userId: state.currentUser!.id, type: action.payload.reactionType }] };
-                            }
-                        }),
-                    };
-                }),
-                users: usersWithNewNotification,
-                loggedInUserProfile: usersWithNewNotification.find(u => u.id === state.loggedInUserProfile?.id) || state.loggedInUserProfile,
-            };
-        }
-        case 'ADD_COMMENT': {
-            if (!state.currentUser) {
-                return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-            return {
-                ...state,
-                habits: state.habits.map(h => 
-                    h.id === action.payload.habitId
-                    ? {
-                        ...h,
-                        posts: h.posts.map(p => 
-                            p.id === action.payload.postId
-                            ? { ...p, comments: [...p.comments, action.payload.comment] }
-                            : p
-                        )
+            if (habitReact && postReact && postReact.author.id !== notifSenderReact.id) {
+                 updatedUsersReact = state.users.map(u => {
+                    if (u.id === postReact.author.id) {
+                         const newNotification: Notification = {
+                            id: `notif_${Date.now()}_${Math.random()}`,
+                            type: NotificationType.NEW_REACTION,
+                            sender: notifSenderReact,
+                            habit: { id: habitReact.id, name: habitReact.name },
+                            reactionType: action.payload.reactionType,
+                            isRead: false,
+                            timestamp: new Date()
+                        };
+                        return { ...u, notifications: [newNotification, ...u.notifications] };
                     }
-                    : h
-                )
-            };
-        }
-        case 'JOIN_HABIT': {
-            if (!state.currentUser || !state.loggedInUserProfile) {
-                return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-            const habitToJoin = state.habits.find(h => h.id === action.payload);
-            if (!habitToJoin || habitToJoin.members.some(m => m.id === state.currentUser!.id) || habitToJoin.members.length >= habitToJoin.memberLimit) {
-                return { ...state, viewingHabitDetail: null };
+                    return u;
+                });
             }
 
-            const newStreak: HabitStreak = {
-                id: `streak_${habitToJoin.id}_${state.currentUser.id}`,
-                habitId: habitToJoin.id,
-                name: habitToJoin.name,
-                topic: habitToJoin.topic,
-                logs: [],
-            };
-            
-            const usersWithJoinNotif = state.users.map(user => {
-                if (habitToJoin.members.some(m => m.id === user.id)) {
+            return { ...state, habits: updatedHabitsReaction, users: updatedUsersReact, currentUser: updatedUsersReact.find(u => u.id === state.currentUser?.id) || null };
+        case 'ADD_COMMENT':
+            const updatedHabitsComment = state.habits.map(habit => {
+                if (habit.id === action.payload.habitId) {
+                    const updatedPosts = habit.posts.map(post => {
+                        if (post.id === action.payload.postId) {
+                            return { ...post, comments: [...post.comments, action.payload.comment] };
+                        }
+                        return post;
+                    });
+                    return { ...habit, posts: updatedPosts };
+                }
+                return habit;
+            });
+            return { ...state, habits: updatedHabitsComment };
+        case 'JOIN_HABIT':
+            const habitToJoin = state.habits.find(h => h.id === action.payload);
+            if (!habitToJoin || !state.currentUser) return state;
+
+            const updatedHabitsJoin = state.habits.map(habit => {
+                if (habit.id === action.payload) {
+                    return { ...habit, members: [...habit.members, state.currentUser!] };
+                }
+                return habit;
+            });
+
+            // Notify all existing members of the habit
+            const updatedUsersJoin = state.users.map(u => {
+                 // If user is a member of the habit (and not the one joining)
+                 if (habitToJoin.members.some(m => m.id === u.id) && u.id !== state.currentUser!.id) {
                      const newNotification: Notification = {
-                        id: `notif_join_${Date.now()}_${user.id}`,
+                        id: `notif_${Date.now()}_${Math.random()}`,
                         type: NotificationType.NEW_MEMBER,
                         sender: state.currentUser!,
                         habit: { id: habitToJoin.id, name: habitToJoin.name },
                         isRead: false,
-                        timestamp: new Date(),
+                        timestamp: new Date()
                     };
-                    return { ...user, notifications: [newNotification, ...user.notifications] };
-                }
-                return user;
+                    return { ...u, notifications: [newNotification, ...u.notifications] };
+                 }
+                 // Add streak to the joining user
+                 if (u.id === state.currentUser!.id) {
+                     return {
+                        ...u,
+                        streaks: [...u.streaks, { id: `streak_${Date.now()}`, habitId: habitToJoin.id, name: habitToJoin.name, topic: habitToJoin.topic, logs: [] }]
+                    }
+                 }
+                 return u;
             });
-
-            const updatedProfileOnJoin = {
-                ...state.loggedInUserProfile,
-                streaks: [...state.loggedInUserProfile.streaks, newStreak]
-            };
 
             return {
                 ...state,
-                habits: state.habits.map(h =>
-                    h.id === action.payload ? { ...h, members: [...h.members, state.currentUser!] } : h
-                ),
-                loggedInUserProfile: updatedProfileOnJoin,
-                users: usersWithJoinNotif.map(u => u.id === state.currentUser!.id ? updatedProfileOnJoin : u),
+                habits: updatedHabitsJoin,
+                users: updatedUsersJoin,
+                currentUser: updatedUsersJoin.find(u => u.id === state.currentUser?.id) || null,
                 selectedHabitId: action.payload,
                 currentView: 'habit',
-                viewingHabitDetail: null,
+                viewingHabitDetail: null
             };
-        }
+        case 'REQUEST_JOIN_HABIT':
+             const habitToRequest = state.habits.find(h => h.id === action.payload);
+             if (!habitToRequest || !state.currentUser) return state;
+
+             const updatedHabitsRequest = state.habits.map(habit => {
+                if (habit.id === action.payload) {
+                    return { ...habit, pendingMembers: [...(habit.pendingMembers || []), state.currentUser!.id] };
+                }
+                return habit;
+            });
+            
+            // Notify Creator
+            const updatedUsersRequest = state.users.map(u => {
+                if (u.id === habitToRequest.creatorId) {
+                     const newNotification: Notification = {
+                        id: `notif_${Date.now()}_${Math.random()}`,
+                        type: NotificationType.JOIN_REQUEST,
+                        sender: state.currentUser!,
+                        habit: { id: habitToRequest.id, name: habitToRequest.name },
+                        isRead: false,
+                        timestamp: new Date()
+                    };
+                    return { ...u, notifications: [newNotification, ...u.notifications] };
+                }
+                return u;
+            });
+
+            return {
+                ...state,
+                habits: updatedHabitsRequest,
+                users: updatedUsersRequest,
+                currentUser: updatedUsersRequest.find(u => u.id === state.currentUser?.id) || null,
+            };
+        case 'APPROVE_JOIN_REQUEST':
+             const { habitId: approveHabitId, userId: approveUserId } = action.payload;
+             const userToApprove = state.users.find(u => u.id === approveUserId);
+             const habitToApprove = state.habits.find(h => h.id === approveHabitId);
+             if (!userToApprove || !habitToApprove) return state;
+
+             const updatedHabitsApprove = state.habits.map(habit => {
+                 if (habit.id === approveHabitId) {
+                     return {
+                         ...habit,
+                         pendingMembers: habit.pendingMembers.filter(id => id !== approveUserId),
+                         members: [...habit.members, userToApprove]
+                     };
+                 }
+                 return habit;
+             });
+
+             // Notify user that they were approved AND Notify all existing members of new member
+             const updatedUsersApprove = state.users.map(u => {
+                 // Notify the approved user
+                 if (u.id === approveUserId) {
+                     const approvedNotification: Notification = {
+                         id: `notif_${Date.now()}_${Math.random()}`,
+                         type: NotificationType.JOIN_APPROVED,
+                         sender: state.currentUser!, // Admin/Creator approved it
+                         habit: { id: habitToApprove.id, name: habitToApprove.name },
+                         isRead: false,
+                         timestamp: new Date()
+                     };
+                     return {
+                         ...u,
+                         streaks: [...u.streaks, { id: `streak_${Date.now()}`, habitId: habitToApprove.id, name: habitToApprove.name, topic: habitToApprove.topic, logs: [] }],
+                         notifications: [approvedNotification, ...u.notifications]
+                     };
+                 }
+                 // Notify existing members
+                 if (habitToApprove.members.some(m => m.id === u.id)) {
+                     const newMemberNotification: Notification = {
+                         id: `notif_${Date.now()}_${Math.random()}`,
+                         type: NotificationType.NEW_MEMBER,
+                         sender: userToApprove,
+                         habit: { id: habitToApprove.id, name: habitToApprove.name },
+                         isRead: false,
+                         timestamp: new Date()
+                     };
+                     return { ...u, notifications: [newMemberNotification, ...u.notifications] };
+                 }
+                 return u;
+             });
+
+             return {
+                 ...state,
+                 habits: updatedHabitsApprove,
+                 users: updatedUsersApprove,
+                 currentUser: updatedUsersApprove.find(u => u.id === state.currentUser?.id) || null,
+             };
+        case 'REJECT_JOIN_REQUEST':
+             const { habitId: rejectHabitId, userId: rejectUserId } = action.payload;
+             const updatedHabitsReject = state.habits.map(habit => {
+                 if (habit.id === rejectHabitId) {
+                     return {
+                         ...habit,
+                         pendingMembers: habit.pendingMembers.filter(id => id !== rejectUserId)
+                     };
+                 }
+                 return habit;
+             });
+             return { ...state, habits: updatedHabitsReject };
+        case 'OPEN_JOIN_REQUEST_MODAL':
+            return { ...state, isJoinRequestModalOpen: { isOpen: true, habitId: action.payload } };
+        case 'CLOSE_JOIN_REQUEST_MODAL':
+            return { ...state, isJoinRequestModalOpen: { isOpen: false, habitId: null } };
+        case 'OPEN_JOIN_REQUESTS_ADMIN_MODAL':
+            return { ...state, isJoinRequestsAdminModalOpen: { isOpen: true, habitId: action.payload } };
+        case 'CLOSE_JOIN_REQUESTS_ADMIN_MODAL':
+            return { ...state, isJoinRequestsAdminModalOpen: { isOpen: false, habitId: null } };
         case 'VIEW_HABIT_DETAIL':
             return { ...state, viewingHabitDetail: action.payload };
         case 'CLOSE_HABIT_DETAIL':
             return { ...state, viewingHabitDetail: null };
-        
         case 'OPEN_ADD_HABIT_MODAL':
             return { ...state, isAddingHabit: true };
         case 'CLOSE_ADD_HABIT_MODAL':
             return { ...state, isAddingHabit: false };
-        case 'ADD_HABIT_STREAK': {
-            if (!state.loggedInUserProfile) return state;
+        case 'ADD_HABIT_STREAK':
+            if (!state.currentUser) return state;
             const newStreak: HabitStreak = {
                 id: `streak_${Date.now()}`,
-                habitId: '', // No associated group habit
+                habitId: `private_${Date.now()}`, // Pseudo ID for private note habits
                 name: action.payload.name,
                 topic: action.payload.topic,
-                logs: [],
+                logs: []
             };
-            const updatedProfileWithNewStreak = {
-                ...state.loggedInUserProfile,
-                streaks: [...state.loggedInUserProfile.streaks, newStreak],
+            // Create a private habit object as well so it appears in lists
+            const newPrivateHabit: Habit = {
+                id: newStreak.habitId,
+                name: action.payload.name,
+                topic: action.payload.topic,
+                description: 'Private Habit Tracker',
+                creatorId: state.currentUser.id,
+                members: [state.currentUser],
+                pendingMembers: [],
+                posts: [],
+                rules: '',
+                memberLimit: 1,
+                type: 'private',
+                isLocked: true
             };
-            return {
-                ...state,
-                loggedInUserProfile: updatedProfileWithNewStreak,
-                users: state.users.map(u => u.id === state.loggedInUserProfile!.id ? updatedProfileWithNewStreak : u),
-                isAddingHabit: false,
+            
+            const updatedUsersStreak = state.users.map(u => {
+                if (u.id === state.currentUser!.id) {
+                    return { ...u, streaks: [...u.streaks, newStreak] };
+                }
+                return u;
+            });
+            return { 
+                ...state, 
+                users: updatedUsersStreak, 
+                currentUser: updatedUsersStreak.find(u => u.id === state.currentUser?.id) || null,
+                habits: [...state.habits, newPrivateHabit],
+                isAddingHabit: false 
             };
-        }
         case 'OPEN_STREAK_DAY_MODAL':
             return { ...state, streakDayModal: { isOpen: true, ...action.payload } };
         case 'CLOSE_STREAK_DAY_MODAL':
             return { ...state, streakDayModal: { isOpen: false, streakId: null, date: null, log: null } };
-        case 'ADD_STREAK_LOG': {
-            if (!state.loggedInUserProfile) return state;
-            
-            const updateUserLogs = (profile: UserProfile): UserProfile => ({
-                ...profile,
-                streaks: profile.streaks.map(streak => {
-                    if (streak.id !== action.payload.streakId) return streak;
-                    const existingLogs = streak.logs.filter(log => log.date.toDateString() !== action.payload.log.date.toDateString());
-                    return {
-                        ...streak,
-                        logs: [...existingLogs, action.payload.log].sort((a,b) => a.date.getTime() - b.date.getTime()),
-                    };
-                }),
+        case 'ADD_STREAK_LOG':
+            if (!state.currentUser) return state;
+            const updatedUsersLog = state.users.map(u => {
+                if (u.id === state.currentUser!.id) {
+                    const updatedStreaks = u.streaks.map(s => {
+                        if (s.id === action.payload.streakId) {
+                             // Check if log for this date already exists, update it if so
+                            const existingLogIndex = s.logs.findIndex(l => new Date(l.date).toDateString() === new Date(action.payload.log.date).toDateString());
+                            if (existingLogIndex >= 0) {
+                                const newLogs = [...s.logs];
+                                newLogs[existingLogIndex] = action.payload.log;
+                                return { ...s, logs: newLogs };
+                            }
+                            return { ...s, logs: [...s.logs, action.payload.log] };
+                        }
+                        return s;
+                    });
+                    return { ...u, streaks: updatedStreaks };
+                }
+                return u;
             });
-
-            const updatedProfile = updateUserLogs(state.loggedInUserProfile);
-            return {
-                ...state,
-                loggedInUserProfile: updatedProfile,
-                users: state.users.map(u => u.id === state.loggedInUserProfile!.id ? updatedProfile : u),
-                streakDayModal: { isOpen: false, streakId: null, date: null, log: null },
-            };
-        }
+            return { ...state, users: updatedUsersLog, currentUser: updatedUsersLog.find(u => u.id === state.currentUser?.id) || null, streakDayModal: { isOpen: false, streakId: null, date: null, log: null } };
         case 'OPEN_SETTINGS':
             return { ...state, isSettingsOpen: true };
         case 'CLOSE_SETTINGS':
             return { ...state, isSettingsOpen: false };
         case 'SET_LANGUAGE':
-            return {
-                ...state,
-                language: action.payload
-            };
+            return { ...state, language: action.payload };
         case 'OPEN_EDIT_PROFILE_MODAL':
             return { ...state, isEditingProfile: true };
         case 'CLOSE_EDIT_PROFILE_MODAL':
             return { ...state, isEditingProfile: false };
-        case 'UPDATE_PROFILE': {
-            if (!state.currentUser || !state.loggedInUserProfile) return state;
-            const { name, avatar, motto } = action.payload;
-
-            const updatedProfileForChanges = { ...state.loggedInUserProfile, name, avatar, motto };
-
-            const updateUserInState = (user: User) => {
-                if (user.id === state.currentUser!.id) {
-                    return { ...user, name, avatar };
-                }
-                return user;
-            };
-            
-            const updateUserProfileInState = (user: UserProfile) => {
-                if (user.id === state.currentUser!.id) {
-                    return { ...user, name, avatar, motto };
-                }
-                return user;
-            };
-
-            return {
-                ...state,
-                currentUser: updateUserProfileInState(state.currentUser as UserProfile),
-                loggedInUserProfile: updatedProfileForChanges,
-                users: state.users.map(updateUserProfileInState),
-                habits: state.habits.map(habit => ({
-                    ...habit,
-                    members: habit.members.map(member => updateUserInState(member) as User),
-                    posts: habit.posts.map(post => ({
-                        ...post,
-                        author: updateUserInState(post.author) as User,
-                        comments: post.comments.map(comment => ({
-                            ...comment,
-                            author: updateUserInState(comment.author) as User,
-                        }))
-                    }))
-                })),
-                isEditingProfile: false,
-            };
-        }
-        case 'SELECT_EVENTS':
-             if (!state.currentUser) {
-                return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-            return { ...state, currentView: 'events', selectedHabitId: null, viewingProfileId: null };
-        case 'SELECT_MESSAGING_LIST':
-             if (!state.currentUser) {
-                return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-            return { ...state, currentView: 'messagingList', selectedHabitId: null, viewingProfileId: null };
+        case 'UPDATE_PROFILE':
+             if (!state.currentUser) return state;
+             const updatedUsersProfile = state.users.map(u => {
+                 if (u.id === state.currentUser!.id) {
+                     return { ...u, ...action.payload };
+                 }
+                 return u;
+             });
+             return { ...state, users: updatedUsersProfile, currentUser: updatedUsersProfile.find(u => u.id === state.currentUser?.id) || null, isEditingProfile: false };
         case 'OPEN_CREATE_EVENT_MODAL':
             return { ...state, isCreatingEvent: true };
         case 'CLOSE_CREATE_EVENT_MODAL':
             return { ...state, isCreatingEvent: false };
         case 'CREATE_EVENT':
-            const newEvent: Event = { ...action.payload, id: `event_${Date.now()}` };
-            return {
-                ...state,
-                events: [newEvent, ...state.events],
-                isCreatingEvent: false,
+            const newEvent: Event = {
+                ...action.payload,
+                id: `event_${Date.now()}`
             };
+            return { ...state, events: [...state.events, newEvent], isCreatingEvent: false };
         case 'VIEW_EVENT_DETAIL':
             return { ...state, viewingEventDetail: action.payload };
         case 'CLOSE_EVENT_DETAIL':
@@ -520,13 +563,9 @@ function appReducer(state: AppState, action: Action): AppState {
         case 'CLOSE_BOOST_HABIT_MODAL':
             return { ...state, isBoostingHabit: { isOpen: false, habitId: null } };
         case 'BOOST_HABIT':
-            return {
-                ...state,
-                boostedHabitId: action.payload,
-                isBoostingHabit: { isOpen: false, habitId: null },
-            };
+            return { ...state, boostedHabitId: action.payload };
         case 'SET_THEME':
-            return { ...state, theme: action.payload };
+             return { ...state, theme: action.payload };
         case 'OPEN_PRIVACY_POLICY':
             return { ...state, isPrivacyPolicyOpen: true };
         case 'CLOSE_PRIVACY_POLICY':
@@ -540,643 +579,810 @@ function appReducer(state: AppState, action: Action): AppState {
         case 'CLOSE_ABOUT_MODAL':
             return { ...state, isAboutModalOpen: false };
         case 'OPEN_MESSAGING':
-            return { ...state, isMessaging: { isOpen: true, recipient: action.payload }};
+            return { ...state, isMessaging: { isOpen: true, recipient: action.payload } };
         case 'CLOSE_MESSAGING':
-            return { ...state, isMessaging: { isOpen: false, recipient: null }};
-        case 'SEND_PRIVATE_MESSAGE': {
-            if (!state.currentUser) return state;
-            const { recipientId, content } = action.payload;
+            return { ...state, isMessaging: { isOpen: false, recipient: null } };
+        case 'SEND_PRIVATE_MESSAGE':
+             if (!state.currentUser) return state;
+             const { recipientId, content } = action.payload;
+             const senderId = state.currentUser.id;
+             
+             // Composite ID: smallerId-largerId
+             const participantIds = [senderId, recipientId].sort();
+             const conversationId = `${participantIds[0]}-${participantIds[1]}`;
+             
+             const newMessage: PrivateMessage = {
+                 id: `msg_${Date.now()}`,
+                 senderId: senderId,
+                 content: content,
+                 timestamp: new Date()
+             };
 
-            const conversationId = [state.currentUser.id, recipientId].sort().join('-');
-            const newMessage: PrivateMessage = {
-                id: `msg_${Date.now()}`,
-                senderId: state.currentUser.id,
-                content,
-                timestamp: new Date(),
-            };
+             let updatedConversations = [...state.conversations];
+             const existingConvIndex = updatedConversations.findIndex(c => c.id === conversationId);
 
-            const recipientProfile = state.users.find(u => u.id === recipientId);
-            let updatedUsersWithMessage = state.users;
+             if (existingConvIndex >= 0) {
+                 const updatedConv = {
+                     ...updatedConversations[existingConvIndex],
+                     messages: [...updatedConversations[existingConvIndex].messages, newMessage]
+                 };
+                 updatedConversations[existingConvIndex] = updatedConv;
+             } else {
+                 const newConv: Conversation = {
+                     id: conversationId,
+                     participantIds: participantIds,
+                     messages: [newMessage]
+                 };
+                 updatedConversations.push(newConv);
+             }
 
-            if (recipientProfile) {
-                const newNotification: Notification = {
-                    id: `notif_msg_${Date.now()}`,
-                    type: NotificationType.NEW_MESSAGE,
-                    sender: state.currentUser,
-                    isRead: false,
-                    timestamp: new Date(),
-                };
-                 updatedUsersWithMessage = state.users.map(u => u.id === recipientId ? { ...u, notifications: [newNotification, ...u.notifications] } : u);
-            }
+             // Notify Recipient
+             const updatedUsersMsg = state.users.map(u => {
+                if (u.id === recipientId) {
+                     const newNotification: Notification = {
+                        id: `notif_${Date.now()}_${Math.random()}`,
+                        type: NotificationType.NEW_MESSAGE,
+                        sender: state.currentUser!,
+                        isRead: false,
+                        timestamp: new Date()
+                    };
+                    return { ...u, notifications: [newNotification, ...u.notifications] };
+                }
+                return u;
+            });
 
-            const existingConversation = state.conversations.find(c => c.id === conversationId);
-            
-            let updatedConversations;
-            if (existingConversation) {
-                 updatedConversations = state.conversations.map(c => 
-                    c.id === conversationId 
-                    ? { ...c, messages: [...c.messages, newMessage] } 
-                    : c
-                );
-            } else {
-                const newConversation: Conversation = {
-                    id: conversationId,
-                    participantIds: [state.currentUser.id, recipientId],
-                    messages: [newMessage],
-                };
-                updatedConversations = [...state.conversations, newConversation];
-            }
-            return { 
-                ...state, 
-                conversations: updatedConversations,
-                users: updatedUsersWithMessage,
-                loggedInUserProfile: updatedUsersWithMessage.find(u => u.id === state.loggedInUserProfile?.id) || state.loggedInUserProfile,
-            };
-        }
-        case 'SELECT_ADMIN_VIEW':
-            if (!state.currentUser?.isAdmin) return state;
-            return { ...state, currentView: 'admin', selectedHabitId: null, viewingProfileId: null };
-
+             return { ...state, conversations: updatedConversations, users: updatedUsersMsg, currentUser: updatedUsersMsg.find(u => u.id === state.currentUser?.id) || null };
         case 'SUBMIT_BOOST_REQUEST':
-            if (!state.currentUser) return state;
-            const newRequest: BoostRequest = {
-                id: `br_${Date.now()}`,
-                habitId: action.payload.habitId,
-                userId: state.currentUser.id,
-                proofImage: action.payload.proofImage,
-                status: 'pending',
-                timestamp: new Date(),
-            };
-            return {
-                ...state,
-                boostRequests: [...state.boostRequests, newRequest],
-                isBoostingHabit: { isOpen: false, habitId: null },
-            };
-        
-        case 'APPROVE_BOOST_REQUEST': {
-            const requestToApprove = state.boostRequests.find(r => r.id === action.payload);
-            if (!requestToApprove) return state;
-
-            return {
-                ...state,
-                boostRequests: state.boostRequests.map(r => r.id === action.payload ? { ...r, status: 'approved' } : r),
-                boostedHabitId: requestToApprove.habitId, // Set the habit of the day
-            };
-        }
-
+             const newRequest: BoostRequest = {
+                 id: `req_${Date.now()}`,
+                 habitId: action.payload.habitId,
+                 userId: state.currentUser!.id,
+                 proofImage: action.payload.proofImage,
+                 status: 'pending',
+                 timestamp: new Date()
+             };
+             return { ...state, boostRequests: [...state.boostRequests, newRequest], isBoostingHabit: { isOpen: false, habitId: null } };
+        case 'APPROVE_BOOST_REQUEST':
+            const reqToApprove = state.boostRequests.find(r => r.id === action.payload);
+            if (reqToApprove) {
+                 const updatedRequests = state.boostRequests.map(r => r.id === action.payload ? { ...r, status: 'approved' } as BoostRequest : r);
+                 return { ...state, boostRequests: updatedRequests, boostedHabitId: reqToApprove.habitId };
+            }
+            return state;
         case 'REJECT_BOOST_REQUEST':
-            return {
-                ...state,
-                boostRequests: state.boostRequests.map(r => r.id === action.payload ? { ...r, status: 'rejected' } : r),
-            };
-        case 'SELECT_GROUP_HABITS':
-            if (!state.currentUser) {
-                return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-            return { ...state, currentView: 'groupHabits', selectedHabitId: null, viewingProfileId: null };
-        case 'SELECT_PRIVATE_HABITS':
-            if (!state.currentUser) {
-                return { ...state, isAuthModalOpen: true, authModalView: 'login' };
-            }
-            return { ...state, currentView: 'privateHabits', selectedHabitId: null, viewingProfileId: null };
-        
+             const updatedRequestsReject = state.boostRequests.map(r => r.id === action.payload ? { ...r, status: 'rejected' } as BoostRequest : r);
+             return { ...state, boostRequests: updatedRequestsReject };
         case 'OPEN_MANAGE_MEMBERS_MODAL':
-            return {
-                ...state,
-                isManageMembersModalOpen: { isOpen: true, habitId: action.payload },
-            };
+            return { ...state, isManageMembersModalOpen: { isOpen: true, habitId: action.payload } };
         case 'CLOSE_MANAGE_MEMBERS_MODAL':
-            return {
-                ...state,
-                isManageMembersModalOpen: { isOpen: false, habitId: null },
-            };
-        case 'KICK_MEMBER': {
+            return { ...state, isManageMembersModalOpen: { isOpen: false, habitId: null } };
+        case 'KICK_MEMBER':
             const { habitId, userId } = action.payload;
-            
-            const updatedHabits = state.habits.map(h => 
-                h.id === habitId 
-                ? { ...h, members: h.members.filter(m => m.id !== userId) }
-                : h
-            );
-
-            const updatedUsers = state.users.map(u => {
+            const updatedHabitsKick = state.habits.map(h => {
+                if (h.id === habitId) {
+                    return { ...h, members: h.members.filter(m => m.id !== userId) };
+                }
+                return h;
+            });
+            // Remove streak from user
+            const updatedUsersKick = state.users.map(u => {
                 if (u.id === userId) {
                     return { ...u, streaks: u.streaks.filter(s => s.habitId !== habitId) };
                 }
                 return u;
             });
-
-            const updatedLoggedInUserProfile = state.loggedInUserProfile?.id === userId 
-                ? updatedUsers.find(u => u.id === userId) || state.loggedInUserProfile
-                : state.loggedInUserProfile;
-
             return {
                 ...state,
-                habits: updatedHabits,
-                users: updatedUsers,
-                loggedInUserProfile: updatedLoggedInUserProfile
+                habits: updatedHabitsKick,
+                users: updatedUsersKick,
+                // If current user was kicked from the viewing habit, maybe redirect? 
+                // For now, simplistic update:
+                currentUser: updatedUsersKick.find(u => u.id === state.currentUser?.id) || null
             };
-        }
+        case 'MARK_NOTIFICATIONS_READ':
+             if (!state.currentUser) return state;
+             // Mark all notifications as read for current user
+             const updatedUserNotifs = state.currentUser.notifications.map(n => ({ ...n, isRead: true }));
+             const updatedUserWithReadNotifs = { ...state.currentUser, notifications: updatedUserNotifs };
+             
+             const updatedUsersWithRead = state.users.map(u => {
+                 if (u.id === state.currentUser!.id) {
+                     return updatedUserWithReadNotifs;
+                 }
+                 return u;
+             });
+             
+             return { ...state, users: updatedUsersWithRead, currentUser: updatedUserWithReadNotifs };
+        case 'UPDATE_PREFERENCES':
+             if (!state.currentUser) return state;
+             const updatedPreferences = { ...state.currentUser.preferences, ...action.payload };
+             const updatedUserWithPrefs = { ...state.currentUser, preferences: updatedPreferences };
+             
+             const updatedUsersWithPrefs = state.users.map(u => {
+                 if (u.id === state.currentUser!.id) {
+                     return updatedUserWithPrefs;
+                 }
+                 return u;
+             });
+             return { ...state, users: updatedUsersWithPrefs, currentUser: updatedUserWithPrefs };
+        case 'SET_VIEW':
+            return { ...state, currentView: action.view, selectedHabitId: null, viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
+        case 'OPEN_HABIT_FROM_URL':
+            return { ...state, currentView: 'habit', selectedHabitId: action.habitId, viewingProfileId: null, viewingHabitDetail: null, viewingEventDetail: null };
         default:
             return state;
     }
 }
 
 
-// --- MAIN APP ---
-export default function App() {
-  const [state, dispatch] = useReducer(appReducer, initialState);
-  const [postContent, setPostContent] = useState('');
-  const [postImage, setPostImage] = useState<File | null>(null);
-  const [postImagePreview, setPostImagePreview] = useState<string | null>(null);
+const App: React.FC = () => {
+    const [state, dispatch] = useReducer(appReducer, initialState);
+    const [postContent, setPostContent] = useState('');
+    const [postImage, setPostImage] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
 
-  const { habits, currentUser, loggedInUserProfile, users, conversations, selectedHabitId, currentView, viewingProfileId, viewingHabitDetail, isAddingHabit, streakDayModal, isSettingsOpen, language, isEditingProfile, events, isCreatingEvent, viewingEventDetail, boostedHabitId, isBoostingHabit, theme, isPrivacyPolicyOpen, isTermsConditionsOpen, isAboutModalOpen, isMessaging, isAuthModalOpen, authModalView, boostRequests, isManageMembersModalOpen, isLandingPage } = state;
-  const t = (key: keyof typeof translations.id) => translations[language][key] || key;
-
-  useEffect(() => {
-    const root = window.document.documentElement;
-    const isDark = theme === 'dark';
-    root.classList.toggle('dark', isDark);
-    localStorage.setItem('habitcom-theme', theme);
-  }, [theme]);
-
-  const selectedHabit = habits.find(h => h.id === selectedHabitId);
-
-  const handleLogin = (email: string, pass: string) => {
-      // Dummy user validation
-      const dummyUser = users.find(u => u.email?.toLowerCase() === email.toLowerCase());
-       if (dummyUser && (pass === 'password123' || (dummyUser.isAdmin && pass === 'adminpass'))) {
-          dispatch({ type: 'LOGIN', payload: dummyUser });
-      } else {
-          alert(t('invalidCredentials'));
-      }
-  };
-
-  const handleRegister = (name: string, email: string, pass: string) => {
-      const newUser: UserProfile = {
-          id: `user_${Date.now()}`,
-          name,
-          email,
-          avatar: `https://i.pravatar.cc/150?u=user_${Date.now()}`,
-          motto: "New to HabitComm!",
-          memberSince: new Date(),
-          totalDaysActive: 0,
-          level: "Novice",
-          cheersGiven: 0,
-          pushesGiven: 0,
-          checkInPercentage: 0,
-          streaks: [],
-          badges: [],
-          notifications: [],
-      };
-      dispatch({ type: 'REGISTER', payload: newUser });
-  };
-
-  const handleImageSelect = (file: File) => {
-        if (postImagePreview) {
-            URL.revokeObjectURL(postImagePreview);
-        }
-        setPostImage(file);
-        setPostImagePreview(URL.createObjectURL(file));
-  };
-  
-  const processImageAndPost = (imageUrl: string) => {
-    if (!selectedHabit || !currentUser) return;
-     const newPost: Post = {
-      id: `post_${Date.now()}`,
-      author: currentUser,
-      content: postContent,
-      habitId: selectedHabit.id,
-      imageUrl: imageUrl || undefined,
-      streak: Math.floor(Math.random() * 30) + 1,
-      reactions: [],
-      comments: [],
-      timestamp: new Date(),
-    };
-
-    dispatch({ type: 'ADD_POST', payload: { habitId: selectedHabit.id, post: newPost } });
-    setPostContent('');
-    setPostImage(null);
-    setPostImagePreview(null);
-    if(postImagePreview) URL.revokeObjectURL(postImagePreview);
-  };
-
-  const handlePostSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if ((!postContent.trim() && !postImage) || !selectedHabit || !currentUser) return;
+    // --- Supabase Auth & Sync ---
     
-    if (postImage) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        processImageAndPost(reader.result as string);
-      };
-      reader.readAsDataURL(postImage);
-    } else {
-      processImageAndPost('');
-    }
-  };
-  
-  // FIX: Changed function signature to accept a single object with habit data including optional coverImage.
-  const handleCreateHabit = (habitData: Omit<Habit, 'id'|'members'|'posts'|'memberLimit'|'highlightIcon'|'creatorId'>) => {
-      if (!currentUser) return;
-      
-        const newHabit: Habit = {
-            ...habitData,
-            id: `habit_${Date.now()}`,
-            creatorId: currentUser.id,
-            members: [currentUser],
-            posts: [],
-            memberLimit: 20,
-        };
-        dispatch({ type: 'CREATE_HABIT', payload: newHabit });
-  };
-  
-  const handleUpdateProfile = (name: string, avatarFile: File | null, motto: string) => {
-    if (!loggedInUserProfile) return;
+    // Fetch user profile from Supabase and map to app state
+    const fetchAndSetUser = async (user: any) => {
+        try {
+            const { data: profile, error } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+            
+            if (error) {
+                console.error("Error fetching profile:", error);
+                return;
+            }
 
-    const processUpdate = (avatarUrl: string) => {
-        dispatch({ type: 'UPDATE_PROFILE', payload: { name, avatar: avatarUrl, motto } });
+            if (profile) {
+                // Map snake_case DB fields to camelCase app state
+                const userProfile: UserProfile = {
+                    id: profile.id,
+                    name: profile.name || user.email?.split('@')[0] || 'User',
+                    avatar: profile.avatar || 'https://i.pravatar.cc/150',
+                    email: profile.email || user.email,
+                    motto: profile.motto || "Ready to start!",
+                    memberSince: new Date(profile.member_since || new Date()),
+                    totalDaysActive: profile.total_days_active || 0,
+                    level: profile.level || "Newbie",
+                    cheersGiven: profile.cheers_given || 0,
+                    pushesGiven: profile.pushes_given || 0,
+                    checkInPercentage: profile.check_in_percentage || 0,
+                    preferences: profile.preferences || { showStats: true, showBadges: true, showDailyTips: false, showTools: false },
+                    streaks: [], // TODO: Fetch streaks from DB
+                    badges: [],
+                    notifications: [],
+                    isAdmin: profile.is_admin
+                };
+                dispatch({ type: 'LOGIN', payload: userProfile });
+            }
+        } catch (err) {
+            console.error("Unexpected error fetching profile:", err);
+        }
     };
 
-    if (avatarFile) {
+    useEffect(() => {
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                await fetchAndSetUser(session.user);
+            }
+            setIsLoading(false);
+        };
+        checkSession();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (session?.user) {
+                await fetchAndSetUser(session.user);
+            } else {
+                dispatch({ type: 'LOGOUT' });
+            }
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
+
+
+    // --- Routing Logic ---
+    
+    useEffect(() => {
+        const handleHashChange = () => {
+            const hash = window.location.hash.replace("#", "");
+            
+            if (!hash) {
+                // Landing page logic handles view state based on auth status separately
+                return;
+            }
+
+            if (hash.startsWith("habit/")) {
+                const slug = hash.split("/")[1];
+                // Reverse lookup habit by slug (name) if possible, or just by ID if simpler.
+                // For now, assuming we pass ID in URL for simplicity or need a map.
+                // The slugify logic suggested earlier used name. Let's stick to ID for reliability or find by name.
+                // Ideally we'd have a map of slug -> ID.
+                // For this implementation, let's try to find a habit that matches the slugified name
+                const habit = state.habits.find(h => slugify(h.name) === slug || h.id === slug);
+                if (habit) {
+                     dispatch({ type: "OPEN_HABIT_FROM_URL", habitId: habit.id });
+                }
+                return;
+            }
+
+             if (hash.startsWith("profile/")) {
+                const slug = hash.split("/")[1];
+                const user = state.users.find(u => slugify(u.name) === slug || u.id === slug);
+                 if (user) {
+                    dispatch({ type: "VIEW_PROFILE", payload: user.id });
+                 }
+                return;
+            }
+            
+            if (hash === "events") dispatch({ type: "SELECT_EVENTS" });
+            if (hash === "explore") dispatch({ type: "SELECT_EXPLORE" });
+            if (hash === "messages") dispatch({ type: "SELECT_MESSAGING_LIST" });
+            if (hash === "group-habits") dispatch({ type: "SELECT_GROUP_HABITS" });
+            if (hash === "private-habits") dispatch({ type: "SELECT_PRIVATE_HABITS" });
+        };
+
+        handleHashChange();
+        window.addEventListener("hashchange", handleHashChange);
+        return () => window.removeEventListener("hashchange", handleHashChange);
+    }, [state.habits, state.users]);
+
+
+    useEffect(() => {
+        if (state.isLandingPage) {
+             // Don't overwrite hash on landing page unless logged in logic dictates
+             return;
+        }
+
+        let newHash = "";
+        if (state.currentView === "explore") newHash = "explore";
+        else if (state.currentView === "events") newHash = "events";
+        else if (state.currentView === "messagingList") newHash = "messages";
+        else if (state.currentView === "groupHabits") newHash = "group-habits";
+        else if (state.currentView === "privateHabits") newHash = "private-habits";
+        else if (state.currentView === "habit" && state.selectedHabitId) {
+            const habit = state.habits.find(h => h.id === state.selectedHabitId);
+            if (habit) newHash = `habit/${slugify(habit.name)}`;
+        }
+        else if (state.currentView === "profile" && state.viewingProfileId) {
+             const user = state.users.find(u => u.id === state.viewingProfileId);
+             if (user) newHash = `profile/${slugify(user.name)}`;
+        }
+
+        if (newHash && window.location.hash !== `#${newHash}`) {
+            window.history.replaceState(null, "", `#${newHash}`);
+        }
+    }, [state.currentView, state.selectedHabitId, state.viewingProfileId, state.habits, state.users, state.isLandingPage]);
+
+
+    // --- Handlers ---
+
+    const t = (key: string) => {
+        return translations[state.language][key as keyof typeof translations['en']] || key;
+    };
+    
+    useEffect(() => {
+        if (state.theme === 'dark') {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+        localStorage.setItem('habitcom-theme', state.theme);
+    }, [state.theme]);
+
+
+    const handleLogin = async (email: string, pass: string) => {
+        const { error } = await supabase.auth.signInWithPassword({
+            email,
+            password: pass,
+        });
+        if (error) {
+            alert(error.message);
+        }
+    };
+    
+    const handleRegister = async (name: string, email: string, pass: string) => {
+        const { error } = await supabase.auth.signUp({
+            email,
+            password: pass,
+            options: {
+                data: {
+                    name: name,
+                    avatar: `https://i.pravatar.cc/150?u=${Date.now()}`
+                }
+            }
+        });
+        
+        if (error) {
+            alert(error.message);
+        } else {
+            alert("Registration successful! Please check your email for verification.");
+            dispatch({ type: 'CLOSE_AUTH_MODAL' });
+        }
+    };
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+    };
+    
+    const handleForgotPassword = async (email: string) => {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.href,
+        });
+        if (error) throw error;
+    };
+
+    const handlePostSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if ((!postContent.trim() && !postImage) || !state.selectedHabitId || !state.currentUser) return;
+
+        const newPost: Post = {
+            id: `post_${Date.now()}`,
+            author: state.currentUser,
+            content: postContent,
+            habitId: state.selectedHabitId,
+            imageUrl: postImage || undefined,
+            streak: state.currentUser.streaks.find(s => s.habitId === state.selectedHabitId)?.logs.length || 0,
+            reactions: [],
+            comments: [],
+            timestamp: new Date(),
+        };
+
+        dispatch({ type: 'ADD_POST', payload: { habitId: state.selectedHabitId, post: newPost } });
+        setPostContent('');
+        setPostImage(null);
+    };
+
+    const handleImageSelect = (file: File) => {
         const reader = new FileReader();
         reader.onloadend = () => {
-            processUpdate(reader.result as string);
+            setPostImage(reader.result as string);
         };
-        reader.readAsDataURL(avatarFile);
-    } else {
-        processUpdate(loggedInUserProfile.avatar);
-    }
-  };
+        reader.readAsDataURL(file);
+    };
 
-  const handleReaction = (postId: string, reactionType: ReactionType, habitId?: string) => {
-    const targetHabitId = habitId || selectedHabitId;
-    if (!targetHabitId) return;
-    dispatch({ type: 'ADD_REACTION', payload: { habitId: targetHabitId, postId, reactionType } });
-  }
-
-  const handleCommentSubmit = (habitId: string, postId: string, content: string) => {
-      if (!currentUser || !content.trim()) return;
-      const newComment: Comment = {
-          id: `comment_${Date.now()}`,
-          author: currentUser,
-          content,
-          timestamp: new Date(),
-      };
-      dispatch({ type: 'ADD_COMMENT', payload: { habitId, postId, comment: newComment } });
-  };
-
-  const handleDayClick = (streakId: string, date: Date) => {
-    const profile = users.find(u => u.streaks.some(s => s.id === streakId));
-    if (!profile) return;
-    const streak = profile.streaks.find(s => s.id === streakId);
-    if (!streak) return;
-    const log = streak.logs.find(l => l.date.toDateString() === date.toDateString()) || null;
-    dispatch({ type: 'OPEN_STREAK_DAY_MODAL', payload: { streakId, date, log } });
-  };
-  
-  const handleCreateEvent = (eventData: Omit<Event, 'id'>) => {
-    dispatch({ type: 'CREATE_EVENT', payload: eventData });
-  };
-  
-  const handleBoostHabit = (habitId: string) => {
-    dispatch({ type: 'OPEN_BOOST_HABIT_MODAL', payload: habitId });
-  };
-  
-  const handleViewProfile = (userId: string) => {
-    dispatch({ type: 'VIEW_PROFILE', payload: userId });
-  };
-
-  const handleSendMessage = (content: string) => {
-    if (!isMessaging.recipient) return;
-    dispatch({ type: 'SEND_PRIVATE_MESSAGE', payload: { recipientId: isMessaging.recipient.id, content } });
-  };
-
-  // FIX: Changed function signature to accept base64 proofImage string directly.
-  const handleBoostSubmit = (proofImage: string) => {
-    if (isBoostingHabit.habitId) {
-        dispatch({ type: 'SUBMIT_BOOST_REQUEST', payload: { habitId: isBoostingHabit.habitId!, proofImage } });
-    }
-  };
-
-  const renderMainView = () => {
-    const allUserHabits = loggedInUserProfile ? habits.filter(h => h.members.some(m => m.id === loggedInUserProfile!.id)) : [];
-    switch (currentView) {
-        case 'admin':
-            return <AdminView 
-                requests={boostRequests}
-                habits={habits}
-                users={users}
-                onApprove={(id) => dispatch({ type: 'APPROVE_BOOST_REQUEST', payload: id })}
-                onReject={(id) => dispatch({ type: 'REJECT_BOOST_REQUEST', payload: id })}
-                t={t}
-            />;
-        case 'profile': {
-            if (!viewingProfileId || !loggedInUserProfile) return null;
-            const profileToView = users.find(u => u.id === viewingProfileId);
-            if (!profileToView) return <p>User not found</p>;
-            return <ProfilePage 
-                profileToView={profileToView} 
-                currentUserProfile={loggedInUserProfile}
-                allHabits={habits}
-                onAddHabit={() => dispatch({type: 'OPEN_ADD_HABIT_MODAL'})}
-                onDayClick={handleDayClick}
-                onOpenMessage={(user) => dispatch({ type: 'OPEN_MESSAGING', payload: user })}
-                onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })}
-                onViewProfile={handleViewProfile}
-                t={t}
-                language={language}
-             />;
+    const handleReaction = (postId: string, reactionType: ReactionType) => {
+        if (state.selectedHabitId) {
+            dispatch({ type: 'ADD_REACTION', payload: { habitId: state.selectedHabitId, postId, reactionType } });
         }
-        case 'createHabit':
-            return <CreateHabitView
-                onCreate={handleCreateHabit}
-                onCancel={() => dispatch({ type: 'SELECT_EXPLORE' })}
-                t={t}
-            />;
-        case 'habit':
-            if (!selectedHabit || !currentUser) {
-                 return <ExploreView 
-                        allHabits={habits}
-                        currentUser={currentUser} 
-                        onJoinHabit={(id) => dispatch({ type: 'JOIN_HABIT', payload: id })} 
-                        onViewDetail={(habit) => dispatch({ type: 'VIEW_HABIT_DETAIL', payload: habit })}
-                        t={t}
-                        boostedHabitId={boostedHabitId}
-                    />;
-            }
-            return <HabitView 
-                selectedHabit={selectedHabit}
-                currentUser={currentUser}
-                allUsers={users}
-                postContent={postContent}
-                setPostContent={setPostContent}
-                postImage={postImagePreview}
-                setPostImage={(img) => {
-                  if (img === null) {
-                    setPostImage(null);
-                    setPostImagePreview(null);
-                    if(postImagePreview) URL.revokeObjectURL(postImagePreview);
-                  }
-                }}
-                handleImageSelect={handleImageSelect}
-                handlePostSubmit={handlePostSubmit}
-                handleReaction={handleReaction}
-                handleCommentSubmit={handleCommentSubmit}
-                handleBoostHabit={handleBoostHabit}
-                onOpenManageMembers={(habitId) => dispatch({ type: 'OPEN_MANAGE_MEMBERS_MODAL', payload: habitId })}
-                onViewProfile={handleViewProfile}
-                t={t}
-                boostedHabitId={boostedHabitId}
-            />;
-        case 'groupHabits':
-             return <UserHabitsListView 
-                allUserHabits={allUserHabits}
-                type="group"
-                onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })}
-                t={t}
-             />;
-        case 'privateHabits':
-              return <UserHabitsListView 
-                allUserHabits={allUserHabits}
-                type="private"
-                onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })}
-                t={t}
-             />;
-        case 'comingSoon':
-            return <ComingSoonView t={t} />;
-        case 'events':
-            return <EventsView 
-                        events={events} 
-                        t={t} 
-                        onCreateEvent={() => dispatch({ type: 'OPEN_CREATE_EVENT_MODAL'})}
-                        onViewEvent={(event) => dispatch({ type: 'VIEW_EVENT_DETAIL', payload: event })}
-                    />;
-        case 'messagingList':
-            if (!loggedInUserProfile) return null;
-            return <MessagingListView
-                conversations={conversations}
-                users={users}
-                currentUserProfile={loggedInUserProfile}
-                onOpenConversation={(user) => dispatch({ type: 'OPEN_MESSAGING', payload: user })}
-                t={t}
-            />;
-        case 'explore':
-        default:
-            return <ExploreView 
-                        allHabits={habits}
-                        currentUser={currentUser} 
-                        onJoinHabit={(id) => dispatch({ type: 'JOIN_HABIT', payload: id })} 
-                        onViewDetail={(habit) => dispatch({ type: 'VIEW_HABIT_DETAIL', payload: habit })}
-                        t={t}
-                        boostedHabitId={boostedHabitId}
-                    />;
+    };
+
+    const handleCommentSubmit = (habitId: string, postId: string, content: string) => {
+        if (!state.currentUser) return;
+        const newComment: Comment = {
+            id: `comment_${Date.now()}`,
+            author: state.currentUser,
+            content,
+            timestamp: new Date(),
+        };
+        dispatch({ type: 'ADD_COMMENT', payload: { habitId, postId, comment: newComment } });
+    };
+    
+    const handleJoinHabit = (habitId: string) => {
+        const habit = state.habits.find(h => h.id === habitId);
+        if (!habit) return;
+
+        if (habit.isLocked) {
+            dispatch({ type: 'OPEN_JOIN_REQUEST_MODAL', payload: habitId });
+        } else {
+            dispatch({ type: 'JOIN_HABIT', payload: habitId });
+        }
+    };
+
+    const handleConfirmJoinRequest = () => {
+        if (state.isJoinRequestModalOpen.habitId) {
+            dispatch({ type: 'REQUEST_JOIN_HABIT', payload: state.isJoinRequestModalOpen.habitId });
+            dispatch({ type: 'CLOSE_JOIN_REQUEST_MODAL' });
+            alert('Permintaan bergabung terkirim!');
+        }
     }
-  };
+    
+    const handleApproveJoinRequest = (userId: string) => {
+        if (state.isJoinRequestsAdminModalOpen.habitId) {
+            dispatch({ type: 'APPROVE_JOIN_REQUEST', payload: { habitId: state.isJoinRequestsAdminModalOpen.habitId, userId } });
+        }
+    }
 
-  // Landing Page View Logic
-  // If no user is logged in, ALWAYS show Landing Page (and Auth Modal if open)
-  if (!currentUser) {
+    const handleRejectJoinRequest = (userId: string) => {
+        if (state.isJoinRequestsAdminModalOpen.habitId) {
+            dispatch({ type: 'REJECT_JOIN_REQUEST', payload: { habitId: state.isJoinRequestsAdminModalOpen.habitId, userId } });
+        }
+    }
+
+    // Updated signature to accept coverImageFile
+    const handleCreateHabit = (habitData: Omit<Habit, 'id' | 'members' | 'posts' | 'memberLimit' | 'highlightIcon' | 'creatorId' | 'coverImage' | 'pendingMembers'>, coverImageFile: File | null) => {
+        // Mock image upload by creating a local URL
+        let coverImageUrl: string | undefined = undefined;
+        if (coverImageFile) {
+            coverImageUrl = URL.createObjectURL(coverImageFile);
+        }
+
+        const newHabit: Habit = {
+            ...habitData,
+            id: '', // Handled by reducer
+            members: [], // Handled by reducer
+            posts: [],
+            memberLimit: 20,
+            highlightIcon: undefined,
+            creatorId: '', // Handled by reducer
+            coverImage: coverImageUrl,
+            pendingMembers: [] // Handled by reducer
+        };
+        dispatch({ type: 'CREATE_HABIT', payload: newHabit });
+    };
+
+    const handleSaveLog = (note: string) => {
+        if (state.streakDayModal.streakId && state.streakDayModal.date) {
+            const newLog: StreakLog = {
+                date: state.streakDayModal.date,
+                note: note
+            };
+            dispatch({ type: 'ADD_STREAK_LOG', payload: { streakId: state.streakDayModal.streakId, log: newLog } });
+        }
+    };
+
+    const handleUpdateProfile = (name: string, avatarFile: File | null, motto: string) => {
+         // In a real app, upload file to server
+         const avatarUrl = avatarFile ? URL.createObjectURL(avatarFile) : state.currentUser!.avatar;
+         dispatch({ type: 'UPDATE_PROFILE', payload: { name, avatar: avatarUrl, motto } });
+    };
+
+    const handleCreateEvent = (eventData: Omit<Event, 'id'>) => {
+        dispatch({ type: 'CREATE_EVENT', payload: eventData });
+    };
+    
+    const handleBoostHabitSubmit = (proofImage: string) => {
+        if (state.isBoostingHabit.habitId) {
+            dispatch({ type: 'SUBMIT_BOOST_REQUEST', payload: { habitId: state.isBoostingHabit.habitId, proofImage } });
+        }
+    };
+
+    if (isLoading) {
+        return <FullPageSpinner />;
+    }
+
+    if (state.isLandingPage && !state.currentUser) {
+        return (
+            <>
+                <LandingPage 
+                    onLoginClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
+                    onRegisterClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' })}
+                    language={state.language}
+                    onLanguageChange={(lang) => dispatch({ type: 'SET_LANGUAGE', payload: lang })}
+                    t={t}
+                />
+                 {state.isAuthModalOpen && (
+                    <AuthModal
+                        initialView={state.authModalView}
+                        onLogin={handleLogin}
+                        onRegister={handleRegister}
+                        onForgotPassword={handleForgotPassword}
+                        onClose={() => dispatch({ type: 'CLOSE_AUTH_MODAL' })}
+                        t={t}
+                    />
+                )}
+            </>
+        );
+    }
+
+    const selectedHabit = state.selectedHabitId ? state.habits.find(h => h.id === state.selectedHabitId) : undefined;
+    const profileToView = state.viewingProfileId ? state.users.find(u => u.id === state.viewingProfileId) : null;
+
+    // Pending requests for admin modal
+    const pendingUsersForAdmin = state.isJoinRequestsAdminModalOpen.habitId 
+        ? state.users.filter(u => state.habits.find(h => h.id === state.isJoinRequestsAdminModalOpen.habitId)?.pendingMembers?.includes(u.id))
+        : [];
+    const habitForAdmin = state.isJoinRequestsAdminModalOpen.habitId 
+        ? state.habits.find(h => h.id === state.isJoinRequestsAdminModalOpen.habitId)
+        : null;
+    
+    // Join request modal habit
+    const habitForJoinRequest = state.isJoinRequestModalOpen.habitId 
+        ? state.habits.find(h => h.id === state.isJoinRequestModalOpen.habitId)
+        : null;
+
+    if (!state.currentUser) return null; // Should not happen due to landing page check
+
     return (
-        <>
-            {isAuthModalOpen && (
-                <AuthModal
-                    initialView={authModalView}
-                    onLogin={handleLogin}
-                    onRegister={handleRegister}
-                    onClose={() => dispatch({ type: 'CLOSE_AUTH_MODAL' })}
-                    t={t}
-                />
-            )}
-            <LandingPage 
-                onLoginClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
-                onRegisterClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' })}
-                language={language}
-                onLanguageChange={(lang) => dispatch({type: 'SET_LANGUAGE', payload: lang})}
-                t={t}
-            />
-        </>
-    );
-  }
-
-  return (
-    <div className="h-full md:p-4 w-full flex justify-center">
-        <div className="h-full w-full max-w-[1100px] flex flex-col font-sans bg-white dark:bg-neutral-900 rounded-xl overflow-hidden shadow-2xl border border-border-color dark:border-neutral-800">
-            {isAuthModalOpen && (
-                <AuthModal
-                    initialView={authModalView}
-                    onLogin={handleLogin}
-                    onRegister={handleRegister}
-                    onClose={() => dispatch({ type: 'CLOSE_AUTH_MODAL' })}
-                    t={t}
-                />
-            )}
-            {isManageMembersModalOpen.isOpen && state.habits.find(h => h.id === isManageMembersModalOpen.habitId) && currentUser && (
-                <ManageMembersModal
-                    habit={state.habits.find(h => h.id === isManageMembersModalOpen.habitId)!}
-                    currentUser={currentUser}
-                    onClose={() => dispatch({ type: 'CLOSE_MANAGE_MEMBERS_MODAL' })}
-                    onKickMember={(userId) => dispatch({ type: 'KICK_MEMBER', payload: { habitId: isManageMembersModalOpen.habitId!, userId } })}
-                    t={t}
-                />
-            )}
-        {viewingHabitDetail && 
-            <HabitDetailModal 
-            habit={viewingHabitDetail} 
-            onClose={() => dispatch({ type: 'CLOSE_HABIT_DETAIL'})}
-            onJoin={(id) => dispatch({ type: 'JOIN_HABIT', payload: id })}
-            onViewProfile={handleViewProfile}
-            isMember={currentUser ? viewingHabitDetail.members.some(m => m.id === currentUser.id) : false}
-            t={t}
-            />}
-            {isAddingHabit && (
-                <AddHabitModal 
-                    onClose={() => dispatch({type: 'CLOSE_ADD_HABIT_MODAL'})}
-                    onSave={(data) => dispatch({type: 'ADD_HABIT_STREAK', payload: data })}
-                    t={t}
-                />
-            )}
-            {streakDayModal.isOpen && streakDayModal.date && streakDayModal.streakId && (
-                <StreakDayModal
-                    date={streakDayModal.date}
-                    log={streakDayModal.log}
-                    onClose={() => dispatch({type: 'CLOSE_STREAK_DAY_MODAL'})}
-                    onSave={(note) => dispatch({type: 'ADD_STREAK_LOG', payload: { streakId: streakDayModal.streakId!, log: { date: streakDayModal.date!, note }} })}
-                    t={t}
-                    language={language}
-                />
-            )}
-            {isSettingsOpen && (
-                <SettingsModal
-                    onClose={() => dispatch({type: 'CLOSE_SETTINGS'})}
-                    onLogout={() => dispatch({ type: 'LOGOUT' })}
-                    currentLanguage={language}
-                    onLanguageChange={(lang) => dispatch({type: 'SET_LANGUAGE', payload: lang})}
-                    currentTheme={theme}
+        <div className="h-full w-full bg-gray-50 dark:bg-neutral-900 flex justify-center transition-colors duration-200 md:py-4">
+            <div className={`flex flex-col h-full w-full max-w-[1100px] bg-white dark:bg-black font-sans text-text-primary dark:text-neutral-200 overflow-hidden relative shadow-xl md:rounded-2xl`}>
+                <Header 
+                    currentUser={state.currentUser} 
+                    onLogout={handleLogout} 
+                    onLoginClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
+                    onRegisterClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' })}
+                    language={state.language}
+                    onLanguageChange={(lang) => dispatch({ type: 'SET_LANGUAGE', payload: lang })}
+                    theme={state.theme}
                     onThemeChange={(theme) => dispatch({ type: 'SET_THEME', payload: theme })}
-                    onOpenPrivacyPolicy={() => dispatch({ type: 'OPEN_PRIVACY_POLICY' })}
-                    onOpenTermsConditions={() => dispatch({ type: 'OPEN_TERMS_CONDITIONS' })}
-                    onOpenAbout={() => dispatch({ type: 'OPEN_ABOUT_MODAL' })}
+                    onOpenSettings={() => dispatch({ type: 'OPEN_SETTINGS' })}
+                    onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT' })}
+                    onSelectAdminView={() => dispatch({ type: 'SELECT_ADMIN_VIEW' })}
+                    onMarkRead={() => dispatch({ type: 'MARK_NOTIFICATIONS_READ' })}
                     t={t}
                 />
-            )}
-            {isEditingProfile && loggedInUserProfile && (
-                <EditProfileModal
-                    currentUser={loggedInUserProfile}
-                    onClose={() => dispatch({ type: 'CLOSE_EDIT_PROFILE_MODAL' })}
-                    onSave={handleUpdateProfile}
+                <div className="flex flex-1 overflow-hidden relative">
+                    <Sidebar 
+                        habits={state.habits} 
+                        selectedHabitId={state.selectedHabitId} 
+                        onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })} 
+                        onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT' })}
+                        currentView={state.currentView}
+                        currentUser={state.currentUser}
+                        onSelectExplore={() => dispatch({ type: 'SELECT_EXPLORE' })}
+                        onViewHabitDetail={(habit) => dispatch({ type: 'VIEW_HABIT_DETAIL', payload: habit })}
+                        onViewProfile={(userId) => dispatch({ type: 'VIEW_PROFILE', payload: userId })}
+                        onOpenSettings={() => dispatch({ type: 'OPEN_SETTINGS' })}
+                        onOpenEditProfile={() => dispatch({ type: 'OPEN_EDIT_PROFILE_MODAL' })}
+                        onSelectEvents={() => dispatch({ type: 'SELECT_EVENTS' })}
+                        onSelectMessagingList={() => dispatch({ type: 'SELECT_MESSAGING_LIST' })}
+                        onSelectAdminView={() => dispatch({ type: 'SELECT_ADMIN_VIEW' })}
+                        onMarkRead={() => dispatch({ type: 'MARK_NOTIFICATIONS_READ' })}
+                        t={t}
+                        language={state.language}
+                    />
+                    
+                    <main className="flex-1 flex flex-col overflow-hidden relative bg-gray-50 dark:bg-neutral-950 shadow-inner border-t border-l border-border-color dark:border-neutral-800 pb-16 md:pb-0">
+                         {state.currentView === 'habit' && (
+                            <HabitView 
+                                selectedHabit={selectedHabit}
+                                currentUser={state.currentUser}
+                                allUsers={state.users}
+                                postContent={postContent}
+                                setPostContent={setPostContent}
+                                postImage={postImage}
+                                setPostImage={setPostImage}
+                                handleImageSelect={handleImageSelect}
+                                handlePostSubmit={handlePostSubmit}
+                                handleReaction={handleReaction}
+                                handleCommentSubmit={handleCommentSubmit}
+                                handleBoostHabit={(habitId) => dispatch({ type: 'OPEN_BOOST_HABIT_MODAL', payload: habitId })}
+                                onOpenManageMembers={(habitId) => dispatch({ type: 'OPEN_MANAGE_MEMBERS_MODAL', payload: habitId })}
+                                onViewProfile={(userId) => dispatch({ type: 'VIEW_PROFILE', payload: userId })}
+                                onOpenJoinRequests={(habitId) => dispatch({ type: 'OPEN_JOIN_REQUESTS_ADMIN_MODAL', payload: habitId })}
+                                t={t}
+                                boostedHabitId={state.boostedHabitId}
+                            />
+                        )}
+                        {state.currentView === 'explore' && (
+                            <ExploreView 
+                                allHabits={state.habits} 
+                                currentUser={state.currentUser} 
+                                onJoinHabit={handleJoinHabit}
+                                onViewDetail={(habit) => dispatch({ type: 'VIEW_HABIT_DETAIL', payload: habit })}
+                                t={t}
+                                boostedHabitId={state.boostedHabitId}
+                            />
+                        )}
+                         {state.currentView === 'groupHabits' && (
+                            <UserHabitsListView 
+                                allUserHabits={state.habits.filter(h => h.members.some(m => m.id === state.currentUser?.id))}
+                                type="group"
+                                onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })}
+                                t={t}
+                            />
+                        )}
+                        {state.currentView === 'privateHabits' && (
+                            <UserHabitsListView 
+                                allUserHabits={state.habits.filter(h => h.members.some(m => m.id === state.currentUser?.id))}
+                                type="private"
+                                onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })}
+                                t={t}
+                            />
+                        )}
+                        {state.currentView === 'profile' && profileToView && (
+                            <ProfilePage 
+                                profileToView={profileToView} 
+                                currentUserProfile={state.currentUser}
+                                allHabits={state.habits}
+                                onAddHabit={() => dispatch({ type: 'OPEN_ADD_HABIT_MODAL' })}
+                                onDayClick={(streakId, date) => {
+                                    const streak = profileToView.streaks.find(s => s.id === streakId);
+                                    const log = streak?.logs.find(l => new Date(l.date).toDateString() === date.toDateString()) || null;
+                                    dispatch({ type: 'OPEN_STREAK_DAY_MODAL', payload: { streakId, date, log } });
+                                }}
+                                onOpenMessage={(user) => dispatch({ type: 'OPEN_MESSAGING', payload: user })}
+                                onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })}
+                                onViewProfile={(userId) => dispatch({ type: 'VIEW_PROFILE', payload: userId })}
+                                t={t}
+                                language={state.language}
+                            />
+                        )}
+                        {state.currentView === 'createHabit' && (
+                            <CreateHabitView 
+                                onCancel={() => dispatch({ type: 'SELECT_EXPLORE' })} 
+                                onCreate={handleCreateHabit}
+                                t={t}
+                            />
+                        )}
+                        {state.currentView === 'events' && (
+                            <EventsView 
+                                events={state.events}
+                                t={t}
+                                onCreateEvent={() => dispatch({ type: 'OPEN_CREATE_EVENT_MODAL' })}
+                                onViewEvent={(event) => dispatch({ type: 'VIEW_EVENT_DETAIL', payload: event })}
+                            />
+                        )}
+                        {state.currentView === 'messagingList' && (
+                            <MessagingListView
+                                conversations={state.conversations}
+                                users={state.users}
+                                currentUserProfile={state.currentUser}
+                                onOpenConversation={(user) => dispatch({ type: 'OPEN_MESSAGING', payload: user })}
+                                t={t}
+                            />
+                        )}
+                         {state.currentView === 'admin' && state.currentUser.isAdmin && (
+                            <AdminView 
+                                requests={state.boostRequests}
+                                habits={state.habits}
+                                users={state.users}
+                                onApprove={(reqId) => dispatch({ type: 'APPROVE_BOOST_REQUEST', payload: reqId })}
+                                onReject={(reqId) => dispatch({ type: 'REJECT_BOOST_REQUEST', payload: reqId })}
+                                t={t}
+                            />
+                        )}
+                        {(state.currentView === 'comingSoon') && <ComingSoonView t={t} />}
+                    </main>
+                </div>
+                
+                <BottomNavbar
+                    currentView={state.currentView}
+                    currentUser={state.currentUser}
+                    viewingProfileId={state.viewingProfileId}
+                    onSelectExplore={() => dispatch({ type: 'SELECT_EXPLORE' })}
+                    onSelectGroupHabits={() => dispatch({ type: 'SELECT_GROUP_HABITS' })}
+                    onSelectPrivateHabits={() => dispatch({ type: 'SELECT_PRIVATE_HABITS' })}
+                    onSelectMessagingList={() => dispatch({ type: 'SELECT_MESSAGING_LIST' })}
+                    onSelectEvents={() => dispatch({ type: 'SELECT_EVENTS' })}
+                    onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT' })}
+                    onViewProfile={(userId) => dispatch({ type: 'VIEW_PROFILE', payload: userId })}
                     t={t}
                 />
-            )}
-            {isCreatingEvent && (
-                <CreateEventModal
-                    onClose={() => dispatch({ type: 'CLOSE_CREATE_EVENT_MODAL' })}
-                    onSave={handleCreateEvent}
-                    t={t}
-                />
-            )}
-            {viewingEventDetail && (
-                <EventDetailModal
-                    event={viewingEventDetail}
-                    onClose={() => dispatch({ type: 'CLOSE_EVENT_DETAIL' })}
-                    t={t}
-                    language={language}
-                />
-            )}
-            {isBoostingHabit.isOpen && state.habits.find(h => h.id === isBoostingHabit.habitId) && (
-                <BoostHabitModal
-                    habit={state.habits.find(h => h.id === isBoostingHabit.habitId)!}
-                    onClose={() => dispatch({ type: 'CLOSE_BOOST_HABIT_MODAL' })}
-                    onSubmit={handleBoostSubmit}
-                    t={t}
-                />
-            )}
-            {isPrivacyPolicyOpen && (
-                <PrivacyPolicyModal
-                    onClose={() => dispatch({ type: 'CLOSE_PRIVACY_POLICY' })}
-                    t={t}
-                />
-            )}
-            {isTermsConditionsOpen && (
-                <TermsConditionsModal
-                    onClose={() => dispatch({ type: 'CLOSE_TERMS_CONDITIONS' })}
-                    t={t}
-                />
-            )}
-            {isAboutModalOpen && (
-                <AboutModal
-                    onClose={() => dispatch({ type: 'CLOSE_ABOUT_MODAL' })}
-                    t={t}
-                />
-            )}
-            {isMessaging.isOpen && isMessaging.recipient && currentUser && (() => {
-            const conversationId = [currentUser.id, isMessaging.recipient!.id].sort().join('-');
-            const conversation = conversations.find(c => c.id === conversationId);
-            return (
-                <MessagingModal
-                recipient={isMessaging.recipient!}
-                currentUser={currentUser}
-                conversation={conversation}
-                onClose={() => dispatch({ type: 'CLOSE_MESSAGING' })}
-                onSendMessage={handleSendMessage}
-                t={t}
-                />
-            );
-            })()}
-        <Header 
-            currentUser={currentUser} 
-            onLogout={() => dispatch({ type: 'LOGOUT' })}
-            onLoginClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'login' })}
-            onRegisterClick={() => dispatch({ type: 'OPEN_AUTH_MODAL', payload: 'register' })}
-            language={language}
-            onLanguageChange={(lang) => dispatch({type: 'SET_LANGUAGE', payload: lang})}
-            theme={theme}
-            onThemeChange={(theme) => dispatch({ type: 'SET_THEME', payload: theme })}
-            onOpenSettings={() => dispatch({type: 'OPEN_SETTINGS'})}
-            onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT'})}
-            onSelectAdminView={() => dispatch({ type: 'SELECT_ADMIN_VIEW' })}
-            t={t}
-            />
-        <div className="flex flex-1 overflow-hidden">
-            <Sidebar 
-            habits={habits} 
-            selectedHabitId={selectedHabitId} 
-            onSelectHabit={(id) => dispatch({ type: 'SELECT_HABIT', payload: id })} 
-            onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT'})}
-            currentView={currentView}
-            currentUser={loggedInUserProfile}
-            onSelectExplore={() => dispatch({ type: 'SELECT_EXPLORE' })}
-            onViewHabitDetail={(habit) => dispatch({ type: 'VIEW_HABIT_DETAIL', payload: habit })}
-            onViewProfile={(id) => dispatch({ type: 'VIEW_PROFILE', payload: id })}
-            onOpenSettings={() => dispatch({type: 'OPEN_SETTINGS'})}
-            onOpenEditProfile={() => dispatch({ type: 'OPEN_EDIT_PROFILE_MODAL' })}
-            onSelectEvents={() => dispatch({ type: 'SELECT_EVENTS' })}
-            onSelectMessagingList={() => dispatch({ type: 'SELECT_MESSAGING_LIST' })}
-            onSelectAdminView={() => dispatch({ type: 'SELECT_ADMIN_VIEW'})}
-            t={t}
-            language={language}
-            />
-            <main className="flex-1 bg-secondary dark:bg-neutral-950 flex flex-col pb-16 md:pb-0">
-                {renderMainView()}
-            </main>
+
+                {/* Modals */}
+                {state.viewingHabitDetail && (
+                    <HabitDetailModal 
+                        habit={state.viewingHabitDetail} 
+                        currentUser={state.currentUser}
+                        onClose={() => dispatch({ type: 'CLOSE_HABIT_DETAIL' })} 
+                        onJoin={handleJoinHabit}
+                        isMember={state.currentUser ? state.viewingHabitDetail.members.some(m => m.id === state.currentUser!.id) : false}
+                        onViewProfile={(userId) => dispatch({ type: 'VIEW_PROFILE', payload: userId })}
+                        t={t}
+                    />
+                )}
+                {state.isAddingHabit && (
+                    <AddHabitModal 
+                        onClose={() => dispatch({ type: 'CLOSE_ADD_HABIT_MODAL' })} 
+                        onSave={(data) => dispatch({ type: 'ADD_HABIT_STREAK', payload: data })}
+                        t={t}
+                    />
+                )}
+                {state.streakDayModal.isOpen && state.streakDayModal.date && (
+                    <StreakDayModal 
+                        date={state.streakDayModal.date} 
+                        log={state.streakDayModal.log}
+                        onClose={() => dispatch({ type: 'CLOSE_STREAK_DAY_MODAL' })} 
+                        onSave={handleSaveLog}
+                        t={t}
+                        language={state.language}
+                    />
+                )}
+                {state.isSettingsOpen && (
+                    <SettingsModal 
+                        onClose={() => dispatch({ type: 'CLOSE_SETTINGS' })} 
+                        onLogout={handleLogout}
+                        currentLanguage={state.language}
+                        onLanguageChange={(lang) => dispatch({ type: 'SET_LANGUAGE', payload: lang })}
+                        currentTheme={state.theme}
+                        onThemeChange={(theme) => dispatch({ type: 'SET_THEME', payload: theme })}
+                        onOpenPrivacyPolicy={() => dispatch({ type: 'OPEN_PRIVACY_POLICY' })}
+                        onOpenTermsConditions={() => dispatch({ type: 'OPEN_TERMS_CONDITIONS' })}
+                        onOpenAbout={() => dispatch({ type: 'OPEN_ABOUT_MODAL' })}
+                        currentUser={state.currentUser}
+                        onUpdatePreferences={(prefs) => dispatch({ type: 'UPDATE_PREFERENCES', payload: prefs })}
+                        t={t}
+                    />
+                )}
+                {state.isEditingProfile && state.currentUser && (
+                    <EditProfileModal 
+                        currentUser={state.currentUser}
+                        onClose={() => dispatch({ type: 'CLOSE_EDIT_PROFILE_MODAL' })} 
+                        onSave={handleUpdateProfile}
+                        t={t}
+                    />
+                )}
+                {state.isCreatingEvent && (
+                    <CreateEventModal
+                        onClose={() => dispatch({ type: 'CLOSE_CREATE_EVENT_MODAL' })}
+                        onSave={handleCreateEvent}
+                        t={t}
+                    />
+                )}
+                {state.viewingEventDetail && (
+                    <EventDetailModal
+                        event={state.viewingEventDetail}
+                        onClose={() => dispatch({ type: 'CLOSE_EVENT_DETAIL' })}
+                        t={t}
+                        language={state.language}
+                    />
+                )}
+                {state.isBoostingHabit.isOpen && state.isBoostingHabit.habitId && (
+                    <BoostHabitModal
+                        habit={state.habits.find(h => h.id === state.isBoostingHabit.habitId)!}
+                        onClose={() => dispatch({ type: 'CLOSE_BOOST_HABIT_MODAL' })}
+                        onSubmit={handleBoostHabitSubmit}
+                        t={t}
+                    />
+                )}
+                 {state.isPrivacyPolicyOpen && (
+                    <PrivacyPolicyModal onClose={() => dispatch({ type: 'CLOSE_PRIVACY_POLICY' })} t={t} />
+                )}
+                {state.isTermsConditionsOpen && (
+                    <TermsConditionsModal onClose={() => dispatch({ type: 'CLOSE_TERMS_CONDITIONS' })} t={t} />
+                )}
+                {state.isAboutModalOpen && (
+                    <AboutModal onClose={() => dispatch({ type: 'CLOSE_ABOUT_MODAL' })} t={t} />
+                )}
+                {state.isMessaging.isOpen && state.isMessaging.recipient && state.currentUser && (
+                    <MessagingModal
+                        recipient={state.isMessaging.recipient}
+                        currentUser={state.currentUser}
+                        conversation={state.conversations.find(c => {
+                            const ids = c.participantIds;
+                            return ids.includes(state.currentUser!.id) && ids.includes(state.isMessaging.recipient!.id);
+                        })}
+                        onClose={() => dispatch({ type: 'CLOSE_MESSAGING' })}
+                        onSendMessage={(content) => dispatch({ type: 'SEND_PRIVATE_MESSAGE', payload: { recipientId: state.isMessaging.recipient!.id, content } })}
+                        t={t}
+                    />
+                )}
+                {state.isAuthModalOpen && (
+                    <AuthModal
+                        initialView={state.authModalView}
+                        onLogin={handleLogin}
+                        onRegister={handleRegister}
+                        onForgotPassword={handleForgotPassword}
+                        onClose={() => dispatch({ type: 'CLOSE_AUTH_MODAL' })}
+                        t={t}
+                    />
+                )}
+                {state.isManageMembersModalOpen.isOpen && state.isManageMembersModalOpen.habitId && state.currentUser && (
+                    <ManageMembersModal
+                        habit={state.habits.find(h => h.id === state.isManageMembersModalOpen.habitId)!}
+                        currentUser={state.currentUser}
+                        onClose={() => dispatch({ type: 'CLOSE_MANAGE_MEMBERS_MODAL' })}
+                        onKickMember={(userId) => dispatch({ type: 'KICK_MEMBER', payload: { habitId: state.isManageMembersModalOpen.habitId!, userId } })}
+                        t={t}
+                    />
+                )}
+                {state.isJoinRequestModalOpen.isOpen && habitForJoinRequest && (
+                    <JoinRequestModal
+                        habit={habitForJoinRequest}
+                        onClose={() => dispatch({ type: 'CLOSE_JOIN_REQUEST_MODAL' })}
+                        onConfirm={handleConfirmJoinRequest}
+                        t={t}
+                    />
+                )}
+                {state.isJoinRequestsAdminModalOpen.isOpen && habitForAdmin && (
+                    <JoinRequestsAdminModal
+                        habit={habitForAdmin}
+                        pendingUsers={pendingUsersForAdmin}
+                        onClose={() => dispatch({ type: 'CLOSE_JOIN_REQUESTS_ADMIN_MODAL' })}
+                        onApprove={handleApproveJoinRequest}
+                        onReject={handleRejectJoinRequest}
+                        t={t}
+                    />
+                )}
+            </div>
         </div>
-        <BottomNavbar
-            currentUser={loggedInUserProfile}
-            currentView={currentView}
-            viewingProfileId={viewingProfileId}
-            onSelectCreateHabit={() => dispatch({ type: 'SELECT_CREATE_HABIT'})}
-            onSelectExplore={() => dispatch({ type: 'SELECT_EXPLORE' })}
-            onSelectGroupHabits={() => dispatch({ type: 'SELECT_GROUP_HABITS' })}
-            onSelectPrivateHabits={() => dispatch({ type: 'SELECT_PRIVATE_HABITS' })}
-            onSelectMessagingList={() => dispatch({ type: 'SELECT_MESSAGING_LIST' })}
-            onSelectEvents={() => dispatch({ type: 'SELECT_EVENTS' })}
-            onViewProfile={(id) => dispatch({ type: 'VIEW_PROFILE', payload: id })}
-            t={t}
-        />
-        <footer className="hidden md:block text-center py-3 border-t border-border-color dark:border-neutral-800 bg-white dark:bg-neutral-900">
-            <p className="text-xs text-text-secondary dark:text-neutral-500">{t('copyright')}</p>
-        </footer>
-        </div>
-    </div>
-  );
-}
+    );
+};
+
+export default App;

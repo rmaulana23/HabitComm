@@ -1,3 +1,5 @@
+
+
 import { Habit, User, UserProfile, ReactionType, StreakLog, Event, Conversation, Notification } from './types';
 
 const loggedInUser: User = {
@@ -19,8 +21,9 @@ const mockUsers: User[] = [
   { id: 'user_3', name: 'Citra', avatar: `https://i.pravatar.cc/150?u=user_3` },
   { id: 'user_4', name: 'Dewi', avatar: `https://i.pravatar.cc/150?u=user_4` },
   { id: 'user_5', name: 'Eko', avatar: `https://i.pravatar.cc/150?u=user_5` },
+  { id: 'user_6', name: 'Fajar', avatar: `https://i.pravatar.cc/150?u=user_6` },
   adminUser,
-  ...Array.from({ length: 150 }, (_, i) => ({ id: `user_${i + 6}`, name: `User ${i + 6}`, avatar: `https://i.pravatar.cc/150?u=user_${i + 6}` }))
+  ...Array.from({ length: 150 }, (_, i) => ({ id: `user_${i + 7}`, name: `User ${i + 7}`, avatar: `https://i.pravatar.cc/150?u=user_${i + 7}` }))
 ];
 
 const generateDynamicLogs = (days: number, salt: string = ''): StreakLog[] => {
@@ -53,6 +56,7 @@ const mockUserProfiles: UserProfile[] = [
       ],
       badges: [],
       notifications: [],
+      preferences: { showStats: true, showBadges: true, showDailyTips: false, showTools: false }
   },
    {
       ...adminUser,
@@ -67,6 +71,7 @@ const mockUserProfiles: UserProfile[] = [
       streaks: [],
       badges: [],
       notifications: [],
+      preferences: { showStats: true, showBadges: true, showDailyTips: false, showTools: false }
   },
   {
       ...mockUsers[1], // Budi
@@ -82,7 +87,8 @@ const mockUserProfiles: UserProfile[] = [
           { id: 's_budi_1', habitId: 'habit_1', name: 'Lari Pagi 5K', topic: 'Running', logs: generateDynamicLogs(28, 'budi_run') },
       ],
       badges: [],
-      notifications: []
+      notifications: [],
+      preferences: { showStats: true, showBadges: true, showDailyTips: false, showTools: false }
   },
   {
       ...mockUsers[2], // Citra
@@ -98,7 +104,8 @@ const mockUserProfiles: UserProfile[] = [
           { id: 's_citra_1', habitId: 'habit_3', name: 'Tantangan UI Harian', topic: 'Design', logs: generateDynamicLogs(45, 'citra_design') },
       ],
       badges: [],
-      notifications: []
+      notifications: [],
+      preferences: { showStats: true, showBadges: true, showDailyTips: false, showTools: false }
   },
   ...mockUsers.slice(3).filter(u => u.id !== adminUser.id).map(u => ({
     ...u,
@@ -112,7 +119,8 @@ const mockUserProfiles: UserProfile[] = [
     checkInPercentage: Math.floor(Math.random() * 100),
     streaks: [],
     badges: [],
-    notifications: []
+    notifications: [],
+    preferences: { showStats: true, showBadges: true, showDailyTips: false, showTools: false }
   }))
 ];
 
@@ -138,13 +146,14 @@ export const getInitialData = () => {
         highlight: 'Tantangan Streak 30-Hari',
         highlightIcon: 'flame',
         members: [loggedInUser, mockUsers[1], mockUsers[2], mockUsers[3], ...mockUsers.slice(5, 18)],
+        pendingMembers: [],
         rules: 'Posting ringkasan larimu sebelum jam 9 pagi. Beri semangat setidaknya ke 2 anggota lain setiap hari!',
         memberLimit: 20,
         type: 'group',
+        isLocked: false,
         posts: [
           {
             id: 'post_1_1',
-            // FIX: Added missing habitId property.
             habitId: 'habit_1',
             author: mockUsers[1],
             content: "Selesai 3.5K hari ini! Lumayan pace menurun karena tanjakan 🥵 #RoadTo5K",
@@ -167,13 +176,14 @@ export const getInitialData = () => {
         highlight: 'Voting Buku Baru',
         highlightIcon: 'vote',
         members: [loggedInUser, mockUsers[4], ...mockUsers.slice(90, 108)],
+        pendingMembers: [],
         rules: 'Baca minimal 15 halaman/hari. Posting satu fakta menarik yang kamu pelajari.',
         memberLimit: 20,
         type: 'group',
+        isLocked: false,
         posts: [
            {
             id: 'post_2_1',
-            // FIX: Added missing habitId property.
             habitId: 'habit_2',
             author: mockUsers[4],
             content: "Tamatkan Bab 3 'Atomic Habits'! Insight ttg pilar kebiasaan meruntuhkan mental block bgt! ? 🤔",
@@ -193,13 +203,14 @@ export const getInitialData = () => {
         highlight: 'Kritik Desain',
         highlightIcon: 'design',
         members: [loggedInUser, mockUsers[2], mockUsers[3], ...mockUsers.slice(20, 35)],
+        pendingMembers: [],
         rules: 'Posting hasil desainmu setiap hari. Berikan feedback yang membangun ke teman-teman.',
         memberLimit: 20,
         type: 'group',
+        isLocked: false,
         posts: [
             {
                 id: 'post_3_1',
-                // FIX: Added missing habitId property.
                 habitId: 'habit_3',
                 author: mockUsers[2],
                 content: 'Selesai desain Daily UI #001: Sign Up Form. Ada feedback buat improve? 🙏 #UIUXDesign',

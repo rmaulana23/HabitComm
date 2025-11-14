@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+
+
+
+import React, { useState, useEffect } from 'react';
 import { UserProfile, Badge, Habit, HabitStreak, StreakLog, User, Language } from '../types';
 import { getIconForTopic, parseContent } from '../utils';
 import NotificationsFeed from './NotificationsFeed';
+import { generateHealthTip } from '../services/geminiService';
+import BMICalculatorCard from './BMICalculatorCard';
 
 interface ProfilePageProps {
     profileToView: UserProfile;
@@ -17,17 +22,17 @@ interface ProfilePageProps {
 }
 
 const CircularProgress: React.FC<{ percentage: number, color: string, size?: number }> = ({ percentage, color, size = 120 }) => {
-    const radius = (size / 2) - 8;
+    const radius = (size / 2) - 4; // Reduced stroke width from 8 to 4 for smaller size
     const circumference = 2 * Math.PI * radius;
     const offset = circumference - (percentage / 100) * circumference;
 
     return (
         <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
             <svg className="w-full h-full" viewBox={`0 0 ${size} ${size}`}>
-                <circle className="text-gray-200 dark:text-neutral-800" strokeWidth="8" stroke="currentColor" fill="transparent" r={radius} cx={size/2} cy={size/2} />
+                <circle className="text-gray-200 dark:text-neutral-800" strokeWidth="4" stroke="currentColor" fill="transparent" r={radius} cx={size/2} cy={size/2} />
                 <circle
                     className={color}
-                    strokeWidth="8"
+                    strokeWidth="4"
                     strokeDasharray={circumference}
                     strokeDashoffset={offset}
                     strokeLinecap="round"
@@ -40,7 +45,7 @@ const CircularProgress: React.FC<{ percentage: number, color: string, size?: num
                 />
             </svg>
             <div className="absolute flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold text-text-primary dark:text-neutral-200">{percentage}%</span>
+                <span className="text-sm font-bold text-text-primary dark:text-neutral-200">{percentage}%</span>
             </div>
         </div>
     );
@@ -202,13 +207,19 @@ const InteractionStats: React.FC<{ userProfile: UserProfile, t: (key: string) =>
     };
 
     return (
-        <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-md border border-border-color dark:border-neutral-800 p-4 flex flex-col items-center">
-            <h3 className="text-lg font-bold text-text-primary dark:text-neutral-200 mb-3">{t('interactionStats')}</h3>
-            <CircularProgress percentage={userProfile.checkInPercentage} color="text-primary dark:text-primary-400" size={120} />
-            <p className="text-sm font-bold text-text-primary dark:text-neutral-300 mt-2 text-center">{t('checkInConsistency')}</p>
-            <p className="text-xs text-text-secondary dark:text-neutral-400 mt-1 text-center h-8">
-                {getConsistencyDescription(userProfile.checkInPercentage)}
-            </p>
+        <div className="bg-white dark:bg-neutral-900 rounded-xl shadow-md border border-border-color dark:border-neutral-800 p-4">
+            <h3 className="text-sm font-bold text-text-secondary dark:text-neutral-400 mb-3 uppercase tracking-wider">{t('interactionStats')}</h3>
+            <div className="flex items-center space-x-4">
+                <div className="flex-shrink-0">
+                    <CircularProgress percentage={userProfile.checkInPercentage} color="text-primary dark:text-primary-400" size={60} />
+                </div>
+                <div className="flex-1">
+                    <p className="text-sm font-bold text-text-primary dark:text-neutral-200">{t('checkInConsistency')}</p>
+                    <p className="text-xs text-text-secondary dark:text-neutral-400 mt-1 leading-relaxed">
+                        {getConsistencyDescription(userProfile.checkInPercentage)}
+                    </p>
+                </div>
+            </div>
         </div>
     );
 };
@@ -251,6 +262,30 @@ const BadgesAndAchievements: React.FC<{ userProfile: UserProfile, t: (key: strin
     );
 };
 
+const DailyTipsCard: React.FC<{ t: (key: string) => string, language: Language }> = ({ t, language }) => {
+    const [tip, setTip] = useState(t('loadingTip'));
+
+    useEffect(() => {
+        const fetchTip = async () => {
+            const generatedTip = await generateHealthTip(language);
+            setTip(generatedTip);
+        };
+        fetchTip();
+    }, [language, t]);
+
+    return (
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl shadow-sm border border-blue-100 dark:border-blue-800 p-4 flex items-start space-x-3">
+            <div className="text-2xl flex-shrink-0">💡</div>
+            <div>
+                <h3 className="text-sm font-bold text-blue-800 dark:text-blue-300 mb-1">{t('dailyTip')}</h3>
+                <p className="text-sm text-blue-700 dark:text-blue-200 leading-relaxed italic">
+                    "{tip}"
+                </p>
+            </div>
+        </div>
+    );
+};
+
 const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserProfile, allHabits, onAddHabit, onDayClick, onOpenMessage, onSelectHabit, onViewProfile, t, language }) => {
     
     const isOwnProfile = profileToView.id === currentUserProfile.id;
@@ -273,6 +308,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserPro
         // Check if the current viewing user is also a member of this group habit
         return habit.members.some(m => m.id === currentUserProfile.id);
     };
+
+    // Determine display preferences, defaulting to true if not set
+    const showStats = profileToView.preferences?.showStats ?? true;
+    const showBadges = profileToView.preferences?.showBadges ?? true;
+    const showDailyTips = profileToView.preferences?.showDailyTips ?? true;
+    const showTools = profileToView.preferences?.showTools ?? true;
 
     return (
         <div className="flex-1 p-6 overflow-y-auto animate-fade-in">
@@ -335,8 +376,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ profileToView, currentUserPro
                             onViewProfile={onViewProfile}
                          />
                     )}
-                    <InteractionStats userProfile={profileToView} t={t} />
-                    <BadgesAndAchievements userProfile={profileToView} t={t} />
+                    {showStats && <InteractionStats userProfile={profileToView} t={t} />}
+                    {showBadges && <BadgesAndAchievements userProfile={profileToView} t={t} />}
+                    {showTools && <BMICalculatorCard t={t} />}
+                    {showDailyTips && <DailyTipsCard t={t} language={language} />}
                 </div>
             </div>
         </div>

@@ -1,3 +1,5 @@
+
+
 import React, { useState, useMemo } from 'react';
 import { Habit } from '../types';
 import { getIconForTopic } from '../utils';
@@ -5,7 +7,7 @@ import { getIconForTopic } from '../utils';
 interface CreateHabitViewProps {
     onCancel: () => void;
     // FIX: Updated signature to pass cover image file separately to match parent handler.
-    onCreate: (habitData: Omit<Habit, 'id' | 'members' | 'posts' | 'memberLimit' | 'highlightIcon' | 'creatorId' | 'coverImage'>, coverImageFile: File | null) => void;
+    onCreate: (habitData: Omit<Habit, 'id' | 'members' | 'posts' | 'memberLimit' | 'highlightIcon' | 'creatorId' | 'coverImage' | 'pendingMembers'>, coverImageFile: File | null) => void;
     t: (key: string) => string;
 }
 
@@ -18,6 +20,7 @@ const CreateHabitView: React.FC<CreateHabitViewProps> = ({ onCancel, onCreate, t
     const [rules, setRules] = useState('');
     const [coverImage, setCoverImage] = useState<string | null>(null);
     const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
+    const [isLocked, setIsLocked] = useState(false);
 
     const habitCategories = useMemo(() => [
         { 
@@ -104,7 +107,7 @@ const CreateHabitView: React.FC<CreateHabitViewProps> = ({ onCancel, onCreate, t
             return;
         }
 
-        onCreate({ name, topic: selectedSubCategory.topic, description, rules, type: habitType }, coverImageFile);
+        onCreate({ name, topic: selectedSubCategory.topic, description, rules, type: habitType, isLocked }, coverImageFile);
     };
 
     return (
@@ -228,6 +231,32 @@ const CreateHabitView: React.FC<CreateHabitViewProps> = ({ onCancel, onCreate, t
                                                 className="w-full bg-gray-50 dark:bg-neutral-800 dark:text-neutral-300 dark:placeholder-neutral-500 p-3 rounded-lg border border-gray-200 dark:border-neutral-700 focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
                                             />
                                         </div>
+                                         <div className="bg-gray-50 dark:bg-neutral-800 p-4 rounded-lg border border-gray-200 dark:border-neutral-700">
+                                            <label className="block text-sm font-bold text-text-primary dark:text-neutral-300 mb-2">{t('groupPrivacy')}</label>
+                                            <div className="flex flex-col space-y-2">
+                                                <label className="flex items-center space-x-3 cursor-pointer">
+                                                    <input 
+                                                        type="radio" 
+                                                        name="privacy" 
+                                                        checked={!isLocked} 
+                                                        onChange={() => setIsLocked(false)} 
+                                                        className="form-radio h-4 w-4 text-primary focus:ring-primary"
+                                                    />
+                                                    <span className="text-text-primary dark:text-neutral-300">{t('publicGroup')}</span>
+                                                </label>
+                                                <label className="flex items-center space-x-3 cursor-pointer">
+                                                    <input 
+                                                        type="radio" 
+                                                        name="privacy" 
+                                                        checked={isLocked} 
+                                                        onChange={() => setIsLocked(true)} 
+                                                        className="form-radio h-4 w-4 text-primary focus:ring-primary"
+                                                    />
+                                                    <span className="text-text-primary dark:text-neutral-300">{t('privateGroup')}</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
                                         <div>
                                             <label htmlFor="cover-image" className="block text-sm font-bold text-text-primary dark:text-neutral-300 mb-2">{t('coverImageOptional')}</label>
                                             <input

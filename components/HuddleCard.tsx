@@ -12,7 +12,17 @@ interface HabitCardProps {
 
 const HabitCard: React.FC<HabitCardProps> = ({ habit, currentUser, onJoin, onClick, t }) => {
     const isMember = currentUser ? habit.members.some(m => m.id === currentUser.id) : false;
+    const isPending = currentUser ? (habit.pendingMembers || []).includes(currentUser.id) : false;
     const isFull = habit.members.length >= habit.memberLimit;
+
+    const getButtonText = () => {
+        if (isMember) return t('joined');
+        if (isPending) return t('requested');
+        if (isFull) return `${t('full')} (${habit.members.length}/${habit.memberLimit})`;
+        return `${t('join')} (${habit.members.length}/${habit.memberLimit})`;
+    };
+
+    const isDisabled = isMember || isFull || isPending;
 
     if (habit.coverImage) {
         return (
@@ -40,16 +50,16 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, currentUser, onJoin, onCli
                         <button
                             onClick={(e) => {
                                 e.stopPropagation();
-                                if (!isMember && !isFull) onJoin(habit.id);
+                                if (!isDisabled) onJoin(habit.id);
                             }}
-                            disabled={isMember || isFull}
-                            className="w-full text-center py-2.5 bg-white/30 backdrop-blur-sm rounded-lg font-bold text-white hover:bg-white/40 transition-colors duration-200 disabled:bg-gray-500/50 disabled:text-gray-200 disabled:cursor-not-allowed flex items-center justify-center shadow-sm"
+                            disabled={isDisabled}
+                            className={`w-full text-center py-2.5 rounded-lg font-bold text-white transition-colors duration-200 flex items-center justify-center shadow-sm ${
+                                isPending 
+                                    ? 'bg-amber-500/80 cursor-default' 
+                                    : 'bg-white/30 hover:bg-white/40 disabled:bg-gray-500/50 disabled:cursor-not-allowed'
+                            }`}
                         >
-                             {isMember
-                                ? t('joined')
-                                : isFull
-                                ? `${t('full')} (${habit.members.length}/${habit.memberLimit})`
-                                : `${t('join')} (${habit.members.length}/${habit.memberLimit})`}
+                             {getButtonText()}
                         </button>
                     </div>
                 </div>
@@ -94,16 +104,16 @@ const HabitCard: React.FC<HabitCardProps> = ({ habit, currentUser, onJoin, onCli
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        if (!isMember && !isFull) onJoin(habit.id);
+                        if (!isDisabled) onJoin(habit.id);
                     }}
-                    disabled={isMember || isFull}
-                    className="w-full text-center py-2.5 bg-primary rounded-lg font-bold text-white hover:bg-primary-600 transition-colors duration-200 disabled:bg-gray-300 dark:disabled:bg-neutral-700 disabled:text-gray-500 disabled:cursor-not-allowed flex items-center justify-center shadow-sm"
+                    disabled={isDisabled}
+                    className={`w-full text-center py-2.5 rounded-lg font-bold text-white transition-colors duration-200 flex items-center justify-center shadow-sm ${
+                        isPending 
+                        ? 'bg-amber-500 cursor-default' 
+                        : 'bg-primary hover:bg-primary-600 disabled:bg-gray-300 dark:disabled:bg-neutral-700 disabled:text-gray-500 disabled:cursor-not-allowed'
+                    }`}
                 >
-                    {isMember
-                        ? t('joined')
-                        : isFull
-                        ? `${t('full')} (${habit.members.length}/${habit.memberLimit})`
-                        : `${t('join')} (${habit.members.length}/${habit.memberLimit})`}
+                    {getButtonText()}
                 </button>
             </div>
         </div>

@@ -1,9 +1,10 @@
 import React from 'react';
-import { Habit } from '../types';
+import { Habit, User } from '../types';
 import { getIconForTopic } from '../utils';
 
 interface HabitDetailModalProps {
     habit: Habit;
+    currentUser: User | null;
     onClose: () => void;
     onJoin: (habitId: string) => void;
     isMember: boolean;
@@ -11,13 +12,23 @@ interface HabitDetailModalProps {
     t: (key: string) => string;
 }
 
-const HabitDetailModal: React.FC<HabitDetailModalProps> = ({ habit, onClose, onJoin, isMember, onViewProfile, t }) => {
+const HabitDetailModal: React.FC<HabitDetailModalProps> = ({ habit, currentUser, onClose, onJoin, isMember, onViewProfile, t }) => {
     const isFull = habit.members.length >= habit.memberLimit;
+    const isPending = currentUser ? (habit.pendingMembers || []).includes(currentUser.id) : false;
 
     const handleViewProfileClick = (userId: string) => {
         onClose(); // Close this modal first
         onViewProfile(userId);
     };
+
+    const getButtonText = () => {
+        if (isMember) return t('joined');
+        if (isPending) return t('requested');
+        if (isFull) return t('full');
+        return t('joinHabit');
+    };
+
+    const isDisabled = isMember || isFull || isPending;
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
@@ -65,11 +76,14 @@ const HabitDetailModal: React.FC<HabitDetailModalProps> = ({ habit, onClose, onJ
                 <div className="flex justify-end pt-6 mt-auto border-t border-border-color dark:border-neutral-800">
                     <button 
                         onClick={() => onJoin(habit.id)}
-                        disabled={isMember || isFull}
-                        className="px-6 py-2.5 text-base font-semibold rounded-lg transition-colors duration-200 disabled:cursor-not-allowed
-                                   bg-primary text-white hover:bg-primary-600 disabled:bg-gray-300 dark:disabled:bg-neutral-700 disabled:text-gray-500"
+                        disabled={isDisabled}
+                        className={`px-6 py-2.5 text-base font-semibold rounded-lg transition-colors duration-200 disabled:cursor-not-allowed
+                                   ${isPending 
+                                        ? 'bg-amber-500 text-white hover:bg-amber-600' 
+                                        : 'bg-primary text-white hover:bg-primary-600 disabled:bg-gray-300 dark:disabled:bg-neutral-700 disabled:text-gray-500'
+                                   }`}
                     >
-                        {isMember ? t('joined') : isFull ? t('full') : t('joinHabit')}
+                        {getButtonText()}
                     </button>
                 </div>
             </div>
